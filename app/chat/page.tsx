@@ -207,11 +207,7 @@ export default function ChatPage() {
         toast.success(`Active vectorstore set to "${selectedFile.name}"`, {
           autoClose: 1500,
         });
-      } else {
-        toast.success(`Active vectorstore set successfully.`, {
-          autoClose: 1500,
-        });
-      }
+      } 
     } catch (error) {
       console.error("Error setting vectorstore:", error);
       // Removed the error toast as per your request
