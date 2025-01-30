@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Assuming you have a RadioGroup component
 import {
   Table,
   TableBody,
@@ -37,17 +37,17 @@ interface File {
   name: string;
   size: string;
   uploadDate: string;
-  unique_id: string; // New property to store unique_id from backend
+  unique_id: string;
 }
 
 export default function AdminPage() {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [allowPublicQueries, setAllowPublicQueries] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null); // Changed to single selection
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null); // To display active vectorstore
+  const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null);
 
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -79,7 +79,7 @@ export default function AdminPage() {
           name: pdfName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated later
+          unique_id: "",
         })) || [];
 
       const excelFiles =
@@ -88,7 +88,7 @@ export default function AdminPage() {
           name: excelName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated later
+          unique_id: "",
         })) || [];
 
       // Fetch file-vectorstore mapping
@@ -120,7 +120,7 @@ export default function AdminPage() {
 
       setFiles([...mappedPdfFiles, ...mappedExcelFiles]);
 
-      // Optionally, fetch the currently active vectorstore
+      // Fetch the currently active vectorstore
       const activeRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/current_vectorstore",
         {
@@ -212,16 +212,6 @@ export default function AdminPage() {
     } catch (error: any) {
       console.error("Error setting active vectorstore:", error);
       toast.error("Failed to set active vectorstore.");
-    }
-  };
-
-  // Handle deleting multiple files
-  const handleDeleteFiles = async () => {
-    if (selectedFile) {
-      // For single deletion, use the existing handleDeleteFile
-      handleDeleteFile(selectedFile);
-    } else {
-      toast.error("Please select at least one file to delete.");
     }
   };
 
@@ -465,17 +455,34 @@ export default function AdminPage() {
                           .map((file) => (
                             <TableRow
                               key={file.id}
-                              className="hover:bg-gray-50 transition-colors duration-150"
+                              className={`hover:bg-gray-50 transition-colors duration-150 ${
+                                activeVectorstore === file.unique_id
+                                  ? "bg-green-100"
+                                  : ""
+                              }`}
                             >
                               <TableCell>
-                                <Checkbox
-                                  checked={selectedFile === file.id}
-                                  onCheckedChange={() => handleSelectFile(file.id)}
-                                />
+                                <RadioGroup
+                                  value={selectedFile}
+                                  onValueChange={(val) =>
+                                    handleSelectFile(val === file.id ? null : val)
+                                  }
+                                  className="flex items-center"
+                                >
+                                  <RadioGroupItem
+                                    value={file.id}
+                                    id={`radio-${file.id}`}
+                                  />
+                                </RadioGroup>
                               </TableCell>
                               <TableCell className="flex items-center text-xs sm:text-sm">
                                 <FileText className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-500" />
                                 {file.name}
+                                {activeVectorstore === file.unique_id && (
+                                  <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-green-200 text-green-800 rounded">
+                                    Active
+                                  </span>
+                                )}
                               </TableCell>
                               <TableCell className="text-xs sm:text-sm">
                                 {file.size}
