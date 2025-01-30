@@ -36,7 +36,7 @@ import { materialLight } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-// Chat message structure
+// Message structure for the chat
 interface Message {
   id: string;
   text: string;
@@ -44,104 +44,104 @@ interface Message {
   timestamp: Date;
 }
 
-// File option structure
+// Structure for the file options in the dropdown
 interface FileOption {
   id: string;
   name: string;
-  unique_id: string;
+  unique_id: string; // This is critical for identifying the vectorstore
 }
 
 export default function ChatPage() {
   const router = useRouter();
 
-  // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  // Progress bar state
   const [progress, setProgress] = useState(0);
 
-  // Uploaded files
+  // List of files from the backend (for the dropdown)
   const [files, setFiles] = useState<FileOption[]>([]);
-  const [selectedUniqueId, setSelectedUniqueId] = useState<string>("all"); // Use unique_id
+  // The currently selected vectorstore's unique_id
+  const [selectedUniqueId, setSelectedUniqueId] = useState<string>("all");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // On mount: check login, fetch files, load messages
+  // ----------------------------------------------------------------
+  // 1. Ensure user is logged in & load chat messages & fetch file list
+  // ----------------------------------------------------------------
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
     if (isLoggedIn !== "true") {
       router.push("/");
       return;
     }
-    fetchUploadedFiles();
 
     // Load messages from localStorage
     const savedMessages = localStorage.getItem("chatMessages");
     if (savedMessages) {
       try {
-        const parsedMessages = JSON.parse(savedMessages);
-        // Convert timestamp strings back to Date objects
-        const restoredMessages: Message[] = parsedMessages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp),
+        const parsed = JSON.parse(savedMessages);
+        const restored: Message[] = parsed.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
         }));
-        setMessages(restoredMessages);
+        setMessages(restored);
       } catch (error) {
         console.error("Failed to parse saved messages:", error);
         localStorage.removeItem("chatMessages"); // Clear corrupted data
       }
     }
+
+    // Fetch the list of files from the backend
+    fetchUploadedFiles();
   }, [router]);
 
-  // Save messages to localStorage whenever they change
+  // ----------------------------------------------------------------
+  // 2. Persist chat messages locally whenever they change
+  // ----------------------------------------------------------------
   useEffect(() => {
     try {
       localStorage.setItem("chatMessages", JSON.stringify(messages));
-    } catch (error) {
-      console.error("Failed to save messages to localStorage:", error);
-      // Handle storage errors (e.g., quota exceeded)
+    } catch (err) {
+      console.error("Failed to store chat messages:", err);
     }
   }, [messages]);
 
-  // Fetch uploaded files and their unique_ids
+  // ----------------------------------------------------------------
+  // 3. Scroll to bottom whenever messages change
+  // ----------------------------------------------------------------
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // ----------------------------------------------------------------
+  // 4. Function to fetch uploaded files & their vectorstore mapping
+  // ----------------------------------------------------------------
   async function fetchUploadedFiles() {
     try {
-      console.log("Fetching uploaded files...");
+      // 4a. Fetch uploaded PDFs/Excels
       const res = await fetch(
-        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files",
-        { method: "GET" }
+        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files"
       );
-      if (!res.ok) {
-        throw new Error("Failed to fetch file list");
-      }
+      if (!res.ok) throw new Error("Failed to fetch file list.");
+
       const data = await res.json();
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
 
-      console.log("Fetching file-vectorstore mapping...");
-      // Fetch file-vectorstore mapping
+      // 4b. Fetch file->vectorstore mapping
       const mappingRes = await fetch(
-        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping",
-        { method: "GET" }
+        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping"
       );
-
-      let mapping = {};
+      let mapping: Record<string, string> = {};
       if (mappingRes.ok) {
-        const mappingData = await mappingRes.json();
-        mapping = mappingData.file_vectorstore_mapping || {};
-        console.log("File-vectorstore mapping fetched:", mapping);
+        const mapData = await mappingRes.json();
+        mapping = mapData.file_vectorstore_mapping || {};
       } else {
-        console.warn("Failed to fetch file-vectorstore mapping.");
+        console.warn("No mapping retrieved from file_vectorstore_mapping.");
       }
 
-      // Combine into one array with unique IDs and unique_id from mapping
+      // 4c. Combine them into one array
       const allFiles: FileOption[] = [
         ...pdfs.map((pdfName: string) => ({
           id: crypto.randomUUID(),
@@ -156,113 +156,154 @@ export default function ChatPage() {
       ];
 
       setFiles(allFiles);
-      console.log("Files after mapping:", allFiles);
     } catch (err) {
-      console.error("Error loading files:", err);
+      console.error("Error fetching files:", err);
       toast.error("Failed to load files.");
     }
   }
 
-  // Handle sending a message
+  // ----------------------------------------------------------------
+  // 5. Immediately set the selected vectorstore on dropdown change
+  // ----------------------------------------------------------------
+  const handleSelectVectorstore = async (newUniqueId: string) => {
+    // Update local state so our UI shows the new selection
+    setSelectedUniqueId(newUniqueId);
+    console.log("User selected vectorstore =>", newUniqueId);
+
+    // If user selects "all" or empty, skip calling set_selected_vectorstore
+    if (!newUniqueId || newUniqueId === "all") {
+      return; // or handle "all" differently
+    }
+
+    try {
+      // POST to set_selected_vectorstore immediately
+      const res = await fetch(
+        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/set_selected_vectorstore",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unique_id: newUniqueId }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to set active vectorstore.");
+      }
+
+      const data = await res.json();
+      console.log("Vectorstore set successfully =>", data.selected_vectorstore_id);
+      toast.success(`Active vectorstore set to ${data.selected_vectorstore_id}`, { autoClose: 1500 });
+    } catch (error) {
+      console.error("Error setting vectorstore =>", error);
+      toast.error("Failed to set the active vectorstore");
+    }
+  };
+
+  // ----------------------------------------------------------------
+  // 6. Sending a message
+  // ----------------------------------------------------------------
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMessage.trim() || isLoading) return;
 
-    // Create user's message
-    const userMessage: Message = {
+    // Construct user message
+    const userMsg: Message = {
       id: Date.now().toString(),
       text: inputMessage,
       isUser: true,
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMsg]);
     setInputMessage("");
     setIsLoading(true);
 
-    // Start progress simulation
+    // Start a simulated progress bar
     setProgress(0);
     const interval = setInterval(() => {
       setProgress((prev) => (prev < 90 ? prev + 10 : 90));
     }, 300);
 
     try {
-      console.log("Sending message to /ask with unique_id:", selectedUniqueId);
-      // Send to backend with selected unique_id
+      // POST question to /ask, including the selected unique_id for the vectorstore
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/ask",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: userMessage.text, unique_id: selectedUniqueId }),
+          body: JSON.stringify({
+            question: userMsg.text,
+            unique_id: selectedUniqueId,
+          }),
         }
       );
 
       setProgress(95);
-
       if (!res.ok) {
         throw new Error("Error from /ask endpoint");
       }
-      const data = await res.json();
-      console.log("Response from /ask:", data);
 
-      // Add AI's response
-      const aiMessage: Message = {
+      const data = await res.json();
+      const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: data.answer || "No response from AI",
         isUser: false,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, aiMessage]);
+      setMessages((prev) => [...prev, aiMsg]);
 
-      // Finish progress
+      // Finish progress bar
       setProgress(100);
-      setTimeout(() => {
-        setProgress(0);
-      }, 500);
+      setTimeout(() => setProgress(0), 500);
     } catch (error) {
-      console.error("Error while calling /ask:", error);
-      const errorMsg: Message = {
-        id: (Date.now() + 2).toString(),
-        text: "Failed to get a response from the AI.",
-        isUser: false,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      console.error("Error calling /ask =>", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 2).toString(),
+          text: "Failed to get a response from the AI.",
+          isUser: false,
+          timestamp: new Date(),
+        },
+      ]);
       setProgress(100);
-      setTimeout(() => {
-        setProgress(0);
-      }, 500);
+      setTimeout(() => setProgress(0), 500);
     } finally {
       clearInterval(interval);
       setIsLoading(false);
     }
   };
 
-  // Handle logout
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("chatMessages"); // Clear chat history
-    router.push("/");
-  };
-
-  // Handle navigation to admin page
-  const handleAdminPage = () => {
-    router.push("/admin");
-  };
-
-  // Format timestamp
+  // ----------------------------------------------------------------
+  // 7. Utility function to format time
+  // ----------------------------------------------------------------
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
+  // ----------------------------------------------------------------
+  // 8. Handle logout and admin navigation
+  // ----------------------------------------------------------------
+  const handleLogout = () => {
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("chatMessages");
+    router.push("/");
+  };
+
+  const handleAdminPage = () => {
+    router.push("/admin");
+  };
+
+  // ----------------------------------------------------------------
+  // 9. Main Render
+  // ----------------------------------------------------------------
   return (
     <div className="flex flex-col h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-10 flex items-center justify-between p-2 sm:p-4 bg-gradient-to-r from-white/90 to-blue-50/90 backdrop-blur-sm shadow-sm transition-all duration-300">
         <div className="flex items-center space-x-2 transition-transform duration-300 hover:scale-105">
           <Image
-            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/logo_cresol%20(5)-YuOOsUQjnFH4cLQWJWAm0hxlK2UYQ9.png"
-            alt="Cresol Logo"
+            src="/some/logo/path.png"
+            alt="Logo"
             width={100}
             height={30}
             className="h-6 w-auto sm:h-8 sm:w-auto"
@@ -291,6 +332,7 @@ export default function ChatPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
           {/* Logout */}
           <TooltipProvider>
             <Tooltip>
@@ -380,7 +422,7 @@ export default function ChatPage() {
                       <div
                         className={`rounded-2xl overflow-hidden shadow-lg ${
                           message.isUser
-                            ? "bg-gradient-to-br from-[#4F46E5] to-[#3730A3]"
+                            ? "bg-gradient-to-br from-indigo-600 to-indigo-800"
                             : "bg-gradient-to-br from-blue-50 to-indigo-50"
                         }`}
                       >
@@ -429,15 +471,14 @@ export default function ChatPage() {
                                   </code>
                                 );
                               },
-                              // Add more custom renderers if needed
                             }}
                           />
                         </div>
                         <div
                           className={`px-3 py-1 sm:px-4 sm:py-2 text-[10px] sm:text-xs ${
                             message.isUser
-                              ? "bg-[#3730A3] text-blue-200"
-                              : "bg-indigo-100 text-indigo-600"
+                              ? "bg-indigo-900 text-blue-100"
+                              : "bg-indigo-100 text-indigo-700"
                           }`}
                         >
                           <TooltipProvider>
@@ -475,18 +516,21 @@ export default function ChatPage() {
         </Card>
       </main>
 
-      {/* Footer with Message Input and Dropdown */}
+      {/* Footer with Input and Vectorstore Dropdown */}
       <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-white/80 backdrop-blur-sm p-2 sm:p-4">
         <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
-          {/* File dropdown & message input side by side */}
           <div className="flex space-x-2">
-            {/* Dropdown: list of uploaded files from the Python backend */}
+            {/* 1. Vectorstore Dropdown */}
             <div className="w-1/3">
-              <Select onValueChange={setSelectedUniqueId} value={selectedUniqueId}>
-                <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-[#4F46E5] focus:border-[#4F46E5] transition-all duration-200 hover:bg-white/70 text-sm">
+              <Select
+                onValueChange={handleSelectVectorstore} // Immediately calls the backend
+                value={selectedUniqueId}
+              >
+                <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm">
                   <SelectValue placeholder="Select file" />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* Optionally handle 'all' as "no single vectorstore" */}
                   <SelectItem value="all">All Files</SelectItem>
                   {files.map((file) => (
                     <SelectItem key={file.id} value={file.unique_id}>
@@ -500,18 +544,18 @@ export default function ChatPage() {
               </Select>
             </div>
 
-            {/* Message Input */}
+            {/* 2. Chat Input and Send Button */}
             <div className="relative flex-1">
               <Input
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder="Type your message..."
-                className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-[#4F46E5] focus:border-[#4F46E5] transition-all duration-200 hover:bg-white/70 text-sm pr-10"
+                className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm pr-10"
                 disabled={isLoading}
               />
               <Button
                 type="submit"
-                className="absolute right-1 top-1 bg-[#4F46E5] hover:bg-[#4338CA] text-white transition-all duration-200 shadow-md hover:shadow-lg p-1"
+                className="absolute right-1 top-1 bg-indigo-600 hover:bg-indigo-700 text-white transition-all duration-200 shadow-md hover:shadow-lg p-1"
                 disabled={!inputMessage.trim() || isLoading}
               >
                 <SendIcon className="h-4 w-4" />
@@ -520,25 +564,25 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Progress Indicator */}
+          {/* 3. Progress Bar for AI thinking */}
           {isLoading && (
             <div className="relative pt-1 my-2">
               <div className="flex mb-1 items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-[#4F46E5] bg-[#4F46E5]/10">
+                  <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-100">
                     AI is thinking...
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs font-semibold inline-block text-[#4F46E5]">
+                  <span className="text-xs font-semibold inline-block text-indigo-600">
                     {progress}%
                   </span>
                 </div>
               </div>
-              <div className="overflow-hidden h-1 mb-1 text-xs flex rounded bg-[#4F46E5]/20">
+              <div className="overflow-hidden h-1 mb-1 text-xs flex rounded bg-indigo-300">
                 <div
                   style={{ width: `${progress}%` }}
-                  className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-[#4F46E5]"
+                  className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-600"
                 ></div>
               </div>
             </div>
