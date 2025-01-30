@@ -46,6 +46,7 @@ interface Message {
 interface FileOption {
   id: string;
   name: string;
+  unique_id: string; // Added unique_id to match backend mapping
 }
 
 export default function ChatPage() {
@@ -61,7 +62,7 @@ export default function ChatPage() {
 
   // Uploaded files
   const [files, setFiles] = useState<FileOption[]>([]);
-  const [selectedFile, setSelectedFile] = useState<string>("all");
+  const [selectedUniqueId, setSelectedUniqueId] = useState<string>("all"); // Use unique_id
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -121,21 +122,38 @@ export default function ChatPage() {
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
 
-      // Combine into one array with unique IDs
+      // Fetch file-vectorstore mapping
+      const mappingRes = await fetch(
+        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping",
+        { method: "GET" }
+      );
+
+      let mapping: { [key: string]: string } = {};
+      if (mappingRes.ok) {
+        const mappingData = await mappingRes.json();
+        mapping = mappingData.file_vectorstore_mapping || {};
+      } else {
+        console.warn("Failed to fetch file-vectorstore mapping.");
+      }
+
+      // Combine into one array with unique IDs and unique_id from mapping
       const allFiles: FileOption[] = [
         ...pdfs.map((pdfName: string) => ({
           id: crypto.randomUUID(),
           name: pdfName,
+          unique_id: mapping[pdfName] || "",
         })),
         ...excels.map((excelName: string) => ({
           id: crypto.randomUUID(),
           name: excelName,
+          unique_id: mapping[excelName] || "",
         })),
       ];
 
       setFiles(allFiles);
     } catch (err) {
       console.error("Error loading files:", err);
+      toast.error("Failed to load files.");
     }
   }
 
@@ -162,13 +180,13 @@ export default function ChatPage() {
     }, 300);
 
     try {
-      // Send to backend
+      // Send to backend with selected unique_id
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/ask",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: userMessage.text }),
+          body: JSON.stringify({ question: userMessage.text, unique_id: selectedUniqueId }),
         }
       );
 
@@ -456,14 +474,14 @@ export default function ChatPage() {
           <div className="flex space-x-2">
             {/* Dropdown: list of uploaded files from the Python backend */}
             <div className="w-1/3">
-              <Select onValueChange={setSelectedFile} value={selectedFile}>
+              <Select onValueChange={setSelectedUniqueId} value={selectedUniqueId}>
                 <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-[#4F46E5] focus:border-[#4F46E5] transition-all duration-200 hover:bg-white/70 text-sm">
                   <SelectValue placeholder="Select file" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Files</SelectItem>
                   {files.map((file) => (
-                    <SelectItem key={file.id} value={file.name}>
+                    <SelectItem key={file.id} value={file.unique_id}>
                       <span className="flex items-center">
                         <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
                         {file.name}
