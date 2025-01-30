@@ -177,7 +177,7 @@ export default function AdminPage() {
         await fetchFilesFromBackend();
       } catch (error) {
         console.error("Upload error:", error);
-        toast.error("Failed to upload file.");
+        toast.error("Wait for 30 seconds to get processed.");
       } finally {
         setUploading(false);
         e.target.value = "";
