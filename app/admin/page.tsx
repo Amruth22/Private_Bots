@@ -1,563 +1,325 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useRouter } from "next/navigation";
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Ensure these components are correctly implemented
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Upload,
-  Trash2,
-  MessageSquare,
   LogOut,
   FileText,
-  Trash,
+  CheckCircle,
+  XCircle,
+  Loader2,
 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox"; // Ensure Checkbox is correctly implemented
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { motion } from "framer-motion";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-interface File {
+// Define the structure for uploaded files
+interface UploadedFile {
   id: string;
   name: string;
-  size: string;
-  uploadDate: string;
-  unique_id: string;
+  status: "pending" | "uploading" | "uploaded" | "failed";
+  unique_id?: string; // Assigned after successful upload
 }
 
 export default function AdminPage() {
   const router = useRouter();
-  const [files, setFiles] = useState<File[]>([]);
-  const [allowPublicQueries, setAllowPublicQueries] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null); // Single selection
-  const [searchQuery, setSearchQuery] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null); // To display active vectorstore
 
+  // State variables
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState<boolean>(false);
+
+  // ----------------------------------------------------------------
+  // 1. Ensure user is logged in and fetch existing uploaded files
+  // ----------------------------------------------------------------
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
     if (isLoggedIn !== "true") {
       router.push("/");
-    } else {
-      fetchFilesFromBackend();
+      return;
     }
+
+    // Fetch existing uploaded files from the backend
+    fetchUploadedFiles();
   }, [router]);
 
-  async function fetchFilesFromBackend() {
+  // ----------------------------------------------------------------
+  // 2. Function to fetch existing uploaded files
+  // ----------------------------------------------------------------
+  const fetchUploadedFiles = async () => {
     try {
-      console.log("Fetching uploaded files...");
-      // Fetch uploaded files
       const res = await fetch(
-        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files",
-        {
-          method: "GET",
-        }
+        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files"
       );
-
       if (!res.ok) {
-        throw new Error("Failed to fetch file list.");
+        throw new Error("Failed to fetch uploaded files.");
       }
 
       const data = await res.json();
-      const pdfFiles =
-        data.uploaded_pdfs?.map((pdfName: string) => ({
+      const pdfs: string[] = data.uploaded_pdfs || [];
+      const excels: string[] = data.uploaded_excels || [];
+
+      const combinedFiles: UploadedFile[] = [
+        ...pdfs.map((name) => ({
           id: crypto.randomUUID(),
-          name: pdfName,
-          size: "Unknown",
-          uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated
-        })) || [];
-
-      const excelFiles =
-        data.uploaded_excels?.map((excelName: string) => ({
+          name,
+          status: "uploaded",
+          unique_id: "", // Assuming unique_id is assigned by the backend
+        })),
+        ...excels.map((name) => ({
           id: crypto.randomUUID(),
-          name: excelName,
-          size: "Unknown",
-          uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated
-        })) || [];
+          name,
+          status: "uploaded",
+          unique_id: "",
+        })),
+      ];
 
-      console.log("Fetching file-vectorstore mapping...");
-      // Fetch file-vectorstore mapping
-      const mappingRes = await fetch(
-        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping",
-        {
-          method: "GET",
-        }
-      );
-
-      let mapping: { [key: string]: string } = {};
-      if (mappingRes.ok) {
-        const mappingData = await mappingRes.json();
-        mapping = mappingData.file_vectorstore_mapping || {};
-        console.log("File-vectorstore mapping fetched:", mapping);
-      } else {
-        console.warn("Failed to fetch file-vectorstore mapping.");
-      }
-
-      // Assign unique_id to each file
-      const mappedPdfFiles = pdfFiles.map((file) => ({
-        ...file,
-        unique_id: mapping[file.name] || "",
-      }));
-
-      const mappedExcelFiles = excelFiles.map((file) => ({
-        ...file,
-        unique_id: mapping[file.name] || "",
-      }));
-
-      setFiles([...mappedPdfFiles, ...mappedExcelFiles]);
-      console.log("Files after mapping:", [...mappedPdfFiles, ...mappedExcelFiles]);
-
-      // Fetch the currently active vectorstore
-      console.log("Fetching currently active vectorstore...");
-      const activeRes = await fetch(
-        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/current_vectorstore",
-        {
-          method: "GET",
-        }
-      );
-
-      if (activeRes.ok) {
-        const activeData = await activeRes.json();
-        setActiveVectorstore(activeData.selected_vectorstore_id || null);
-        console.log("Active vectorstore set to:", activeData.selected_vectorstore_id);
-      } else {
-        console.warn("Failed to fetch current active vectorstore.");
-      }
-    } catch (error: any) {
-      console.error("Error fetching file list:", error);
+      setUploadedFiles(combinedFiles);
+    } catch (error) {
+      console.error("Error fetching uploaded files:", error);
       toast.error("Failed to load uploaded files.");
     }
-  }
-
-  // Handle file upload with uploading state and feedback
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setUploading(true);
-      const file = e.target.files[0];
-      console.log("Uploading file:", file.name);
-
-      try {
-        const formData = new FormData();
-        formData.append("files", file);
-
-        const res = await fetch(
-          "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/upload",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
-
-        if (!res.ok) {
-          throw new Error("Error uploading file.");
-        }
-
-        const resData = await res.json();
-        console.log("Upload response:", resData);
-
-        toast.success(`File "${file.name}" uploaded successfully.`);
-        // Refresh file list to show newly uploaded file(s)
-        await fetchFilesFromBackend();
-      } catch (error) {
-        console.error("Upload error:", error);
-        toast.error("Wait for 30 seconds to get processed.");
-      } finally {
-        setUploading(false);
-        e.target.value = "";
-      }
-    }
   };
 
-  // Handle setting the selected file as active vectorstore
-  const handleSetActiveVectorstore = async () => {
-    if (!selectedFile) {
-      toast.error("Please select a file to set as active vectorstore.");
-      return;
-    }
+  // ----------------------------------------------------------------
+  // 3. Handler for file selection and automatic upload
+  // ----------------------------------------------------------------
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const selected = files.find((file) => file.id === selectedFile);
-    console.log("Selected file for activation:", selected);
+    const file = files[0];
+    setSelectedFile(file);
 
-    if (!selected || !selected.unique_id) {
-      toast.error("Selected file does not have a valid vectorstore.");
-      return;
-    }
+    // Add the file to the uploadedFiles state with 'pending' status
+    const newFile: UploadedFile = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      status: "pending",
+    };
+    setUploadedFiles((prev) => [newFile, ...prev]);
+
+    // Start uploading the file
+    await uploadFile(newFile.id, file);
+  };
+
+  // ----------------------------------------------------------------
+  // 4. Function to upload a file
+  // ----------------------------------------------------------------
+  const uploadFile = async (fileId: string, file: File) => {
+    setUploading(true);
+    setUploadedFiles((prev) =>
+      prev.map((f) =>
+        f.id === fileId ? { ...f, status: "uploading" } : f
+      )
+    );
 
     try {
-      console.log("Sending request to set active vectorstore to:", selected.unique_id);
+      const formData = new FormData();
+      formData.append("file", file);
+
       const res = await fetch(
-        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/set_selected_vectorstore",
+        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/upload_file",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ unique_id: selected.unique_id }),
+          body: formData,
         }
       );
 
       if (!res.ok) {
-        throw new Error("Failed to set active vectorstore.");
+        throw new Error("File upload failed.");
       }
 
       const data = await res.json();
-      console.log("Response from set_selected_vectorstore:", data);
 
-      if (data.selected_vectorstore_id) {
-        setActiveVectorstore(data.selected_vectorstore_id);
-        toast.success(`Vectorstore "${selected.name}" is now active.`);
-      } else {
-        throw new Error("No selected_vectorstore_id in response.");
-      }
-    } catch (error: any) {
-      console.error("Error setting active vectorstore:", error);
-      toast.error("Failed to set active vectorstore.");
+      // Assuming the backend returns the unique_id after successful upload
+      const { unique_id } = data;
+
+      setUploadedFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileId
+            ? { ...f, status: "uploaded", unique_id }
+            : f
+        )
+      );
+
+      toast.success(`"${file.name}" uploaded successfully!`);
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      setUploadedFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileId ? { ...f, status: "failed" } : f
+        )
+      );
+      toast.error(`Failed to upload "${file.name}".`);
+    } finally {
+      setUploading(false);
     }
   };
 
-  // Handle deleting a single file
-  const handleDeleteFile = async (id: string) => {
-    const fileToDelete = files.find((file) => file.id === id);
-    console.log("Attempting to delete file:", fileToDelete);
-
-    if (!fileToDelete) {
-      toast.error("File not found.");
+  // ----------------------------------------------------------------
+  // 5. Handler to retry uploading a failed file
+  // ----------------------------------------------------------------
+  const handleRetry = async (file: UploadedFile) => {
+    if (!file.unique_id && file.status === "failed") {
+      // Assuming unique_id is not assigned if upload failed
+      // You might need to re-upload the file from the original source
+      toast.info("Please re-select the file to retry uploading.");
       return;
     }
 
-    try {
-      const res = await fetch(
-        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/delete_vectorstore",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ filename: fileToDelete.name }),
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error("Failed to delete file.");
-      }
-
-      const data = await res.json();
-      console.log("Delete response:", data);
-
-      // Update the frontend state
-      setFiles(files.filter((file) => file.id !== id));
-      setSelectedFile(null); // Clear selection if the deleted file was selected
-
-      // If the deleted file was the active vectorstore, update the activeVectorstore state
-      if (activeVectorstore === fileToDelete.unique_id) {
-        setActiveVectorstore(null);
-        toast.info("Active vectorstore has been deleted.");
-      }
-
-      toast.success(`File "${fileToDelete.name}" has been deleted.`);
-    } catch (error: any) {
-      console.error("Error deleting file:", error);
-      toast.error("Failed to delete file.");
-    }
+    // If unique_id exists, perhaps you can reprocess it
+    // Implement based on backend capabilities
+    // For simplicity, we'll assume re-upload is needed
+    toast.info("Please re-select the file to retry uploading.");
   };
 
-  // Handle selecting a single file (radio button behavior)
-  const handleSelectFile = (id: string) => {
-    setSelectedFile(id === selectedFile ? null : id); // Toggle selection
-    console.log("SelectedFile state updated to:", id === selectedFile ? null : id);
+  // ----------------------------------------------------------------
+  // 6. Handle logout and navigation
+  // ----------------------------------------------------------------
+  const handleLogout = () => {
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("chatMessages");
+    router.push("/");
   };
 
   const handleChatPage = () => {
     router.push("/chat");
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
-    router.push("/");
-  };
-
-  const handleClearChatHistory = () => {
-    const confirmClear = window.confirm(
-      "Are you sure you want to clear your chat history? This action cannot be undone."
-    );
-    if (!confirmClear) return;
-
-    localStorage.removeItem("chatMessages");
-    toast.success("Chat history has been cleared.");
-  };
-
+  // ----------------------------------------------------------------
+  // 7. Main Render
+  // ----------------------------------------------------------------
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
-      {/* Loading overlay */}
-      {uploading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white p-4 rounded shadow-md flex flex-col items-center space-y-2">
-            <svg
-              className="animate-spin h-6 w-6 text-indigo-500"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              ></circle>
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8H4z"
-              ></path>
-            </svg>
-            <p className="text-gray-700">Uploading your file, please wait...</p>
-          </div>
-        </div>
-      )}
-
+    <div className="flex flex-col h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
       {/* Header */}
-      <header className="flex items-center justify-between p-3 sm:p-4 bg-white/80 backdrop-blur-sm shadow-sm">
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => router.push("/chat")}
-            className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 rounded-md"
-          >
-            <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/logo_cresol%20(5)-YuOOsUQjnFH4cLQWJWAm0hxlK2UYQ9.png"
-              alt="Cresol Logo"
-              width={150}
-              height={40}
-              className="h-8 sm:h-10 w-auto cursor-pointer"
-            />
-          </button>
+      <header className="fixed top-0 left-0 right-0 z-10 flex items-center justify-between p-2 sm:p-4 bg-gradient-to-r from-white/90 to-blue-50/90 backdrop-blur-sm shadow-sm transition-all duration-300">
+        <div className="flex items-center space-x-2 transition-transform duration-300 hover:scale-105">
+          <Image
+            src="/path/to/your/logo.png" // Replace with your logo path
+            alt="Logo"
+            width={100}
+            height={30}
+            className="h-6 w-auto sm:h-8 sm:w-auto"
+          />
         </div>
-        <h1 className="text-lg sm:text-xl font-semibold text-gray-800 hidden sm:block">
-          Admin Settings
+        <h1 className="text-base sm:text-xl font-semibold text-gray-800 hidden xs:block bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+          Admin Dashboard
         </h1>
         <div className="flex items-center space-x-1 sm:space-x-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleChatPage}
-            className="text-gray-600 hover:text-gray-900"
-          >
-            <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
-            <span className="sr-only">Back to Chat</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            className="text-gray-600 hover:text-gray-900"
-          >
-            <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
-            <span className="sr-only">Logout</span>
-          </Button>
+          {/* Chat Page Navigation */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleChatPage}
+                  className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 transition-colors duration-300"
+                >
+                  <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="sr-only">Chat Page</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Chat Page</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Logout */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-gray-600 hover:text-red-600 hover:bg-red-100 transition-colors duration-300"
+                >
+                  <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="sr-only">Logout</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Log out</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-2 sm:p-4 md:p-6 overflow-hidden">
-        <div className="max-w-4xl mx-auto h-full">
-          <Card className="bg-white/80 backdrop-blur-sm shadow-lg h-full overflow-hidden">
-            <CardHeader className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b p-3 sm:p-4">
-              <CardTitle className="text-xl sm:text-2xl text-[#4F46E5]">
-                File Management
-              </CardTitle>
-            </CardHeader>
-            <ScrollArea className="h-[calc(100vh-16rem)] px-3 sm:px-6">
-              <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
-                {/* Controls */}
-                <div className="flex items-center justify-between space-x-2 pb-4 border-b">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="allowPublicQueries"
-                      checked={allowPublicQueries}
-                      onCheckedChange={(checked) =>
-                        setAllowPublicQueries(checked as boolean)
-                      }
-                    />
-                    <label
-                      htmlFor="allowPublicQueries"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      Allow Public Queries
-                    </label>
-                  </div>
-                  {/* Set as Active Button */}
-                  <Button
-                    onClick={handleSetActiveVectorstore}
-                    disabled={!selectedFile}
-                    variant="default"
-                    size="sm"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                  >
-                    Set as Active
-                  </Button>
-                </div>
-
-                {/* Upload File */}
-                <div>
-                  <h3 className="text-base sm:text-lg font-medium mb-2">
-                    Upload File
-                  </h3>
-                  <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                    <Input
-                      type="file"
-                      onChange={handleFileUpload}
-                      className="flex-1 text-sm"
-                      disabled={uploading} // disable input while uploading
-                    />
-                    <Button
-                      className="w-full sm:w-auto bg-[#4F46E5] hover:bg-[#4338CA] text-white transition-all duration-200 text-sm"
-                      disabled={uploading} // disable button while uploading
-                    >
-                      <Upload className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                      Upload
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Uploaded Files */}
-                <div>
-                  <h3 className="text-base sm:text-lg font-medium mb-2">
-                    Uploaded Files
-                  </h3>
-                  <div className="bg-white/50 backdrop-blur-sm rounded-lg overflow-hidden">
-                    <Input
-                      type="text"
-                      placeholder="Search files..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="mb-2 px-2 py-1 text-sm"
-                    />
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[40px]">Select</TableHead>
-                          <TableHead className="text-xs sm:text-sm">
-                            File Name
-                          </TableHead>
-                          <TableHead className="text-xs sm:text-sm">Size</TableHead>
-                          <TableHead className="text-xs sm:text-sm">
-                            Upload Date
-                          </TableHead>
-                          <TableHead className="text-xs sm:text-sm">
-                            Actions
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {files
-                          .filter((file) =>
-                            file.name
-                              .toLowerCase()
-                              .includes(searchQuery.toLowerCase())
-                          )
-                          .map((file) => (
-                            <TableRow
-                              key={file.id}
-                              className={`hover:bg-gray-50 transition-colors duration-150 ${
-                                activeVectorstore === file.unique_id
-                                  ? "bg-green-100"
-                                  : ""
-                              }`}
-                            >
-                              <TableCell>
-                                <RadioGroup
-                                  value={selectedFile}
-                                  onValueChange={(val) =>
-                                    handleSelectFile(val === file.id ? null : val)
-                                  }
-                                  className="flex items-center"
-                                >
-                                  <RadioGroupItem
-                                    value={file.id}
-                                    id={`radio-${file.id}`}
-                                  />
-                                </RadioGroup>
-                              </TableCell>
-                              <TableCell className="flex items-center text-xs sm:text-sm">
-                                <FileText className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-500" />
-                                {file.name}
-                                {activeVectorstore === file.unique_id && (
-                                  <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-green-200 text-green-800 rounded">
-                                    Active
-                                  </span>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-xs sm:text-sm">
-                                {file.size}
-                              </TableCell>
-                              <TableCell className="text-xs sm:text-sm">
-                                {file.uploadDate}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteFile(file.id)}
-                                  className="text-red-600 hover:text-red-800 hover:bg-red-100 transition-colors duration-200"
-                                >
-                                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="sr-only">Delete file</span>
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-
-                {/* Active Vectorstore Display */}
-                {activeVectorstore && (
-                  <div className="mt-4 p-4 bg-green-100 rounded-md">
-                    <p className="text-green-800">
-                      Active Vectorstore:{" "}
-                      <span className="font-semibold">
-                        {files.find((file) => file.unique_id === activeVectorstore)?.name || activeVectorstore}
-                      </span>
-                    </p>
-                  </div>
-                )}
-
-                {/* Clear Chat History Section */}
-                <div className="mt-6">
-                  <h3 className="text-base sm:text-lg font-medium mb-2">
-                    Manage Chat History
-                  </h3>
-                  <Button
-                    variant="destructive"
-                    onClick={handleClearChatHistory}
-                    className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white transition-all duration-200"
-                  >
-                    <Trash className="h-5 w-5" />
-                    <span>Clear Chat History</span>
-                  </Button>
-                </div>
+      <main className="flex-1 overflow-auto p-2 sm:p-4 pt-16 sm:pt-20">
+        <Card className="max-w-4xl mx-auto p-4 bg-white shadow-lg">
+          <h2 className="text-xl font-semibold mb-4">Upload Files</h2>
+          <div className="flex flex-col space-y-4">
+            {/* File Input */}
+            <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors duration-200">
+              <input
+                type="file"
+                accept=".pdf,.xlsx,.xls"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <div className="flex flex-col items-center">
+                <FileText className="w-8 h-8 text-gray-500" />
+                <p className="mt-2 text-gray-500">Drag & drop a file or click to select</p>
+                <p className="mt-1 text-xs text-gray-400">(PDF, Excel)</p>
               </div>
-            </ScrollArea>
-          </Card>
-        </div>
+            </label>
+
+            {/* Uploaded Files List */}
+            <div className="mt-6">
+              <h3 className="text-lg font-medium mb-2">Uploaded Files</h3>
+              {uploadedFiles.length === 0 ? (
+                <p className="text-gray-500">No files uploaded yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {uploadedFiles.map((file) => (
+                    <li key={file.id} className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <Avatar>
+                          <AvatarImage src="/path/to/file-icon.png" alt="File Icon" />
+                          <AvatarFallback>
+                            <FileText />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{file.name}</p>
+                          <p className="text-sm text-gray-500">
+                            {file.status === "uploaded" && file.unique_id
+                              ? `Vectorstore ID: ${file.unique_id}`
+                              : file.status.charAt(0).toUpperCase() + file.status.slice(1)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {file.status === "uploading" && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                        {file.status === "uploaded" && <CheckCircle className="w-5 h-5 text-green-500" />}
+                        {file.status === "failed" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRetry(file)}
+                            className="text-red-500 hover:text-red-600"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </Card>
       </main>
 
       {/* Toast Container for Notifications */}
