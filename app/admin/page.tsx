@@ -1,17 +1,18 @@
 "use client";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Assuming you have a RadioGroup component
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Import RadioGroup components
 import {
   Table,
   TableBody,
@@ -37,17 +38,17 @@ interface File {
   name: string;
   size: string;
   uploadDate: string;
-  unique_id: string;
+  unique_id: string; // New property to store unique_id from backend
 }
 
 export default function AdminPage() {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [allowPublicQueries, setAllowPublicQueries] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null); // Single selection
   const [searchQuery, setSearchQuery] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null);
+  const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null); // To display active vectorstore
 
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -75,20 +76,20 @@ export default function AdminPage() {
       const data = await res.json();
       const pdfFiles =
         data.uploaded_pdfs?.map((pdfName: string) => ({
-          id: Date.now().toString() + Math.random(),
+          id: crypto.randomUUID(),
           name: pdfName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "",
+          unique_id: "", // Placeholder, will be updated
         })) || [];
 
       const excelFiles =
         data.uploaded_excels?.map((excelName: string) => ({
-          id: Date.now().toString() + Math.random(),
+          id: crypto.randomUUID(),
           name: excelName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "",
+          unique_id: "", // Placeholder, will be updated
         })) || [];
 
       // Fetch file-vectorstore mapping
@@ -512,8 +513,10 @@ export default function AdminPage() {
                 {activeVectorstore && (
                   <div className="mt-4 p-4 bg-green-100 rounded-md">
                     <p className="text-green-800">
-                      Active Vectorstore ID:{" "}
-                      <span className="font-semibold">{activeVectorstore}</span>
+                      Active Vectorstore:{" "}
+                      <span className="font-semibold">
+                        {files.find((file) => file.unique_id === activeVectorstore)?.name || activeVectorstore}
+                      </span>
                     </p>
                   </div>
                 )}
