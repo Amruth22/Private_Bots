@@ -5,14 +5,13 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
-  CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Import RadioGroup components
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Ensure these components are correctly implemented
 import {
   Table,
   TableBody,
@@ -30,6 +29,7 @@ import {
   Trash,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox"; // Ensure Checkbox is correctly implemented
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -38,7 +38,7 @@ interface File {
   name: string;
   size: string;
   uploadDate: string;
-  unique_id: string; // New property to store unique_id from backend
+  unique_id: string;
 }
 
 export default function AdminPage() {
@@ -61,6 +61,7 @@ export default function AdminPage() {
 
   async function fetchFilesFromBackend() {
     try {
+      console.log("Fetching uploaded files...");
       // Fetch uploaded files
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files",
@@ -92,6 +93,7 @@ export default function AdminPage() {
           unique_id: "", // Placeholder, will be updated
         })) || [];
 
+      console.log("Fetching file-vectorstore mapping...");
       // Fetch file-vectorstore mapping
       const mappingRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping",
@@ -104,6 +106,7 @@ export default function AdminPage() {
       if (mappingRes.ok) {
         const mappingData = await mappingRes.json();
         mapping = mappingData.file_vectorstore_mapping || {};
+        console.log("File-vectorstore mapping fetched:", mapping);
       } else {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
@@ -120,8 +123,10 @@ export default function AdminPage() {
       }));
 
       setFiles([...mappedPdfFiles, ...mappedExcelFiles]);
+      console.log("Files after mapping:", [...mappedPdfFiles, ...mappedExcelFiles]);
 
       // Fetch the currently active vectorstore
+      console.log("Fetching currently active vectorstore...");
       const activeRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/current_vectorstore",
         {
@@ -132,6 +137,9 @@ export default function AdminPage() {
       if (activeRes.ok) {
         const activeData = await activeRes.json();
         setActiveVectorstore(activeData.selected_vectorstore_id || null);
+        console.log("Active vectorstore set to:", activeData.selected_vectorstore_id);
+      } else {
+        console.warn("Failed to fetch current active vectorstore.");
       }
     } catch (error: any) {
       console.error("Error fetching file list:", error);
@@ -143,8 +151,8 @@ export default function AdminPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setUploading(true);
-
       const file = e.target.files[0];
+      console.log("Uploading file:", file.name);
 
       try {
         const formData = new FormData();
@@ -163,6 +171,7 @@ export default function AdminPage() {
         }
 
         const resData = await res.json();
+        console.log("Upload response:", resData);
 
         toast.success(`File "${file.name}" uploaded successfully.`);
         // Refresh file list to show newly uploaded file(s)
@@ -185,6 +194,7 @@ export default function AdminPage() {
     }
 
     const selected = files.find((file) => file.id === selectedFile);
+    console.log("Selected file for activation:", selected);
 
     if (!selected || !selected.unique_id) {
       toast.error("Selected file does not have a valid vectorstore.");
@@ -192,6 +202,7 @@ export default function AdminPage() {
     }
 
     try {
+      console.log("Sending request to set active vectorstore to:", selected.unique_id);
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/set_selected_vectorstore",
         {
@@ -208,8 +219,14 @@ export default function AdminPage() {
       }
 
       const data = await res.json();
-      setActiveVectorstore(data.selected_vectorstore_id);
-      toast.success(`Vectorstore "${selected.name}" is now active.`);
+      console.log("Response from set_selected_vectorstore:", data);
+
+      if (data.selected_vectorstore_id) {
+        setActiveVectorstore(data.selected_vectorstore_id);
+        toast.success(`Vectorstore "${selected.name}" is now active.`);
+      } else {
+        throw new Error("No selected_vectorstore_id in response.");
+      }
     } catch (error: any) {
       console.error("Error setting active vectorstore:", error);
       toast.error("Failed to set active vectorstore.");
@@ -219,13 +236,14 @@ export default function AdminPage() {
   // Handle deleting a single file
   const handleDeleteFile = async (id: string) => {
     const fileToDelete = files.find((file) => file.id === id);
+    console.log("Attempting to delete file:", fileToDelete);
+
     if (!fileToDelete) {
       toast.error("File not found.");
       return;
     }
 
     try {
-      // Delete the file from backend
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/delete_vectorstore",
         {
@@ -242,6 +260,7 @@ export default function AdminPage() {
       }
 
       const data = await res.json();
+      console.log("Delete response:", data);
 
       // Update the frontend state
       setFiles(files.filter((file) => file.id !== id));
@@ -263,6 +282,7 @@ export default function AdminPage() {
   // Handle selecting a single file (radio button behavior)
   const handleSelectFile = (id: string) => {
     setSelectedFile(id === selectedFile ? null : id); // Toggle selection
+    console.log("SelectedFile state updated to:", id === selectedFile ? null : id);
   };
 
   const handleChatPage = () => {
