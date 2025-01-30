@@ -33,6 +33,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { materialLight } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 // Chat message structure
 interface Message {
@@ -46,7 +48,7 @@ interface Message {
 interface FileOption {
   id: string;
   name: string;
-  unique_id: string; // Added unique_id to match backend mapping
+  unique_id: string;
 }
 
 export default function ChatPage() {
@@ -108,9 +110,10 @@ export default function ChatPage() {
     }
   }, [messages]);
 
-  // Fetch uploaded files
+  // Fetch uploaded files and their unique_ids
   async function fetchUploadedFiles() {
     try {
+      console.log("Fetching uploaded files...");
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files",
         { method: "GET" }
@@ -122,16 +125,18 @@ export default function ChatPage() {
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
 
+      console.log("Fetching file-vectorstore mapping...");
       // Fetch file-vectorstore mapping
       const mappingRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping",
         { method: "GET" }
       );
 
-      let mapping: { [key: string]: string } = {};
+      let mapping = {};
       if (mappingRes.ok) {
         const mappingData = await mappingRes.json();
         mapping = mappingData.file_vectorstore_mapping || {};
+        console.log("File-vectorstore mapping fetched:", mapping);
       } else {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
@@ -151,6 +156,7 @@ export default function ChatPage() {
       ];
 
       setFiles(allFiles);
+      console.log("Files after mapping:", allFiles);
     } catch (err) {
       console.error("Error loading files:", err);
       toast.error("Failed to load files.");
@@ -180,6 +186,7 @@ export default function ChatPage() {
     }, 300);
 
     try {
+      console.log("Sending message to /ask with unique_id:", selectedUniqueId);
       // Send to backend with selected unique_id
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/ask",
@@ -196,6 +203,7 @@ export default function ChatPage() {
         throw new Error("Error from /ask endpoint");
       }
       const data = await res.json();
+      console.log("Response from /ask:", data);
 
       // Add AI's response
       const aiMessage: Message = {
@@ -537,6 +545,9 @@ export default function ChatPage() {
           )}
         </form>
       </footer>
+
+      {/* Toast Container for Notifications */}
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar />
     </div>
   );
 }
