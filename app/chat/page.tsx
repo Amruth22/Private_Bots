@@ -196,11 +196,24 @@ export default function ChatPage() {
 
       const data = await res.json();
       console.log("Vectorstore set successfully:", data.selected_vectorstore_id);
-      toast.success(`Active vectorstore set to "${data.selected_vectorstore_id}"`, {
-        autoClose: 1500,
-      });
+
+      // Find the file name associated with the unique_id
+      const selectedFile = files.find(
+        (file) => file.unique_id === data.selected_vectorstore_id
+      );
+
+      if (selectedFile) {
+        toast.success(`Active vectorstore set to "${selectedFile.name}"`, {
+          autoClose: 1500,
+        });
+      } else {
+        toast.success(`Active vectorstore set successfully.`, {
+          autoClose: 1500,
+        });
+      }
     } catch (error) {
       console.error("Error setting vectorstore:", error);
+      // Only show the error toast if there was an actual error
       toast.error("Failed to set the active vectorstore.");
     }
   };
