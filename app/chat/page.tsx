@@ -190,6 +190,7 @@ export default function ChatPage() {
         }
       );
 
+      // Removed error throwing on non-OK responses
       // if (!res.ok) {
       //   throw new Error("Failed to set active vectorstore.");
       // }
@@ -211,7 +212,11 @@ export default function ChatPage() {
           autoClose: 1500,
         });
       }
-    } 
+    } catch (error) {
+      console.error("Error setting vectorstore:", error);
+      // Removed the error toast as per your request
+      // toast.error("Failed to set the active vectorstore.");
+    }
   };
 
   // ----------------------------------------------------------------
