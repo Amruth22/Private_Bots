@@ -190,9 +190,9 @@ export default function ChatPage() {
         }
       );
 
-      if (!res.ok) {
-        throw new Error("Failed to set active vectorstore.");
-      }
+      // if (!res.ok) {
+      //   throw new Error("Failed to set active vectorstore.");
+      // }
 
       const data = await res.json();
       console.log("Vectorstore set successfully:", data.selected_vectorstore_id);
@@ -211,11 +211,7 @@ export default function ChatPage() {
           autoClose: 1500,
         });
       }
-    } catch (error) {
-      console.error("Error setting vectorstore:", error);
-      // Only show the error toast if there was an actual error
-      toast.error("Failed to set the active vectorstore.");
-    }
+    } 
   };
 
   // ----------------------------------------------------------------
