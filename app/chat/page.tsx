@@ -36,7 +36,7 @@ import { materialLight } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-// Message structure for the chat
+// Define the structure of a chat message
 interface Message {
   id: string;
   text: string;
@@ -44,30 +44,28 @@ interface Message {
   timestamp: Date;
 }
 
-// Structure for the file options in the dropdown
+// Define the structure for file options in the dropdown
 interface FileOption {
   id: string;
   name: string;
-  unique_id: string; // This is critical for identifying the vectorstore
+  unique_id: string; // Unique identifier for the vectorstore
 }
 
 export default function ChatPage() {
   const router = useRouter();
 
+  // State variables
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-
-  // List of files from the backend (for the dropdown)
   const [files, setFiles] = useState<FileOption[]>([]);
-  // The currently selected vectorstore's unique_id
-  const [selectedUniqueId, setSelectedUniqueId] = useState<string>("all");
+  const [selectedUniqueId, setSelectedUniqueId] = useState<string>("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ----------------------------------------------------------------
-  // 1. Ensure user is logged in & load chat messages & fetch file list
+  // 1. Ensure user is logged in, load chat messages, and fetch file list
   // ----------------------------------------------------------------
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -119,7 +117,8 @@ export default function ChatPage() {
   // ----------------------------------------------------------------
   async function fetchUploadedFiles() {
     try {
-      // 4a. Fetch uploaded PDFs/Excels
+      console.log("Fetching uploaded files...");
+      // 4a. Fetch uploaded PDFs and Excels
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files"
       );
@@ -129,7 +128,8 @@ export default function ChatPage() {
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
 
-      // 4b. Fetch file->vectorstore mapping
+      // 4b. Fetch file-vectorstore mapping
+      console.log("Fetching file-vectorstore mapping...");
       const mappingRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping"
       );
@@ -137,8 +137,9 @@ export default function ChatPage() {
       if (mappingRes.ok) {
         const mapData = await mappingRes.json();
         mapping = mapData.file_vectorstore_mapping || {};
+        console.log("File-vectorstore mapping fetched:", mapping);
       } else {
-        console.warn("No mapping retrieved from file_vectorstore_mapping.");
+        console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
       // 4c. Combine them into one array
@@ -156,6 +157,18 @@ export default function ChatPage() {
       ];
 
       setFiles(allFiles);
+      console.log("Files after mapping:", allFiles);
+
+      // 4d. Optionally set the first file as default selected
+      if (allFiles.length > 0) {
+        const firstValid = allFiles.find((file) => file.unique_id);
+        if (firstValid) {
+          setSelectedUniqueId(firstValid.unique_id);
+          console.log("Default selected unique_id:", firstValid.unique_id);
+          // Automatically set the first vectorstore as active
+          await setSelectedVectorstore(firstValid.unique_id);
+        }
+      }
     } catch (err) {
       console.error("Error fetching files:", err);
       toast.error("Failed to load files.");
@@ -163,20 +176,11 @@ export default function ChatPage() {
   }
 
   // ----------------------------------------------------------------
-  // 5. Immediately set the selected vectorstore on dropdown change
+  // 5. Function to set the selected vectorstore
   // ----------------------------------------------------------------
-  const handleSelectVectorstore = async (newUniqueId: string) => {
-    // Update local state so our UI shows the new selection
-    setSelectedUniqueId(newUniqueId);
-    console.log("User selected vectorstore =>", newUniqueId);
-
-    // If user selects "all" or empty, skip calling set_selected_vectorstore
-    if (!newUniqueId || newUniqueId === "all") {
-      return; // or handle "all" differently
-    }
-
+  const setSelectedVectorstore = async (newUniqueId: string) => {
+    console.log("Setting vectorstore to unique_id:", newUniqueId);
     try {
-      // POST to set_selected_vectorstore immediately
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/set_selected_vectorstore",
         {
@@ -191,16 +195,27 @@ export default function ChatPage() {
       }
 
       const data = await res.json();
-      console.log("Vectorstore set successfully =>", data.selected_vectorstore_id);
-      toast.success(`Active vectorstore set to ${data.selected_vectorstore_id}`, { autoClose: 1500 });
+      console.log("Vectorstore set successfully:", data.selected_vectorstore_id);
+      toast.success(`Active vectorstore set to "${data.selected_vectorstore_id}"`, {
+        autoClose: 1500,
+      });
     } catch (error) {
-      console.error("Error setting vectorstore =>", error);
-      toast.error("Failed to set the active vectorstore");
+      console.error("Error setting vectorstore:", error);
+      toast.error("Failed to set the active vectorstore.");
     }
   };
 
   // ----------------------------------------------------------------
-  // 6. Sending a message
+  // 6. Handler for dropdown selection change
+  // ----------------------------------------------------------------
+  const handleSelectVectorstore = async (newUniqueId: string) => {
+    setSelectedUniqueId(newUniqueId);
+    console.log("User selected vectorstore unique_id:", newUniqueId);
+    await setSelectedVectorstore(newUniqueId);
+  };
+
+  // ----------------------------------------------------------------
+  // 7. Sending a message
   // ----------------------------------------------------------------
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +239,7 @@ export default function ChatPage() {
     }, 300);
 
     try {
+      console.log("Sending message to /ask with unique_id:", selectedUniqueId);
       // POST question to /ask, including the selected unique_id for the vectorstore
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/ask",
@@ -243,6 +259,9 @@ export default function ChatPage() {
       }
 
       const data = await res.json();
+      console.log("Response from /ask:", data);
+
+      // Add AI's response
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: data.answer || "No response from AI",
@@ -255,7 +274,7 @@ export default function ChatPage() {
       setProgress(100);
       setTimeout(() => setProgress(0), 500);
     } catch (error) {
-      console.error("Error calling /ask =>", error);
+      console.error("Error calling /ask:", error);
       setMessages((prev) => [
         ...prev,
         {
@@ -274,14 +293,14 @@ export default function ChatPage() {
   };
 
   // ----------------------------------------------------------------
-  // 7. Utility function to format time
+  // 8. Utility function to format time
   // ----------------------------------------------------------------
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   // ----------------------------------------------------------------
-  // 8. Handle logout and admin navigation
+  // 9. Handle logout and admin navigation
   // ----------------------------------------------------------------
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
@@ -294,7 +313,7 @@ export default function ChatPage() {
   };
 
   // ----------------------------------------------------------------
-  // 9. Main Render
+  // 10. Main Render
   // ----------------------------------------------------------------
   return (
     <div className="flex flex-col h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
@@ -302,7 +321,7 @@ export default function ChatPage() {
       <header className="fixed top-0 left-0 right-0 z-10 flex items-center justify-between p-2 sm:p-4 bg-gradient-to-r from-white/90 to-blue-50/90 backdrop-blur-sm shadow-sm transition-all duration-300">
         <div className="flex items-center space-x-2 transition-transform duration-300 hover:scale-105">
           <Image
-            src="/some/logo/path.png"
+            src="/path/to/your/logo.png" // Replace with your logo path
             alt="Logo"
             width={100}
             height={30}
@@ -411,8 +430,8 @@ export default function ChatPage() {
                         <AvatarImage
                           src={
                             message.isUser
-                              ? "/user-avatar.png"
-                              : "/ai-avatar.png"
+                              ? "/path/to/user-avatar.png" // Replace with your user avatar path
+                              : "/path/to/ai-avatar.png" // Replace with your AI avatar path
                           }
                         />
                         <AvatarFallback>
@@ -523,15 +542,13 @@ export default function ChatPage() {
             {/* 1. Vectorstore Dropdown */}
             <div className="w-1/3">
               <Select
-                onValueChange={handleSelectVectorstore} // Immediately calls the backend
+                onValueChange={handleSelectVectorstore} // Automatically triggers the POST request
                 value={selectedUniqueId}
               >
                 <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm">
                   <SelectValue placeholder="Select file" />
                 </SelectTrigger>
                 <SelectContent>
-                  {/* Optionally handle 'all' as "no single vectorstore" */}
-                  <SelectItem value="all">All Files</SelectItem>
                   {files.map((file) => (
                     <SelectItem key={file.id} value={file.unique_id}>
                       <span className="flex items-center">
