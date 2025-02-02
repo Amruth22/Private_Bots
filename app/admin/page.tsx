@@ -65,14 +65,14 @@ export default function AdminPage() {
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
-      // Backend returns three arrays: PDFs, Excels, and URLs.
+      // Get PDFs, Excel files, and URLs (all types)
       const pdfFiles =
         data.uploaded_pdfs?.map((pdfName: string) => ({
           id: crypto.randomUUID(),
           name: pdfName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // placeholder; will update from mapping
+          unique_id: "", // Placeholder; will update from mapping
         })) || [];
       const excelFiles =
         data.uploaded_excels?.map((excelName: string) => ({
@@ -80,7 +80,7 @@ export default function AdminPage() {
           name: excelName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // placeholder; will update from mapping
+          unique_id: "", // Placeholder; will update from mapping
         })) || [];
       const urlFiles =
         data.uploaded_urls?.map((url: string) => ({
@@ -88,7 +88,7 @@ export default function AdminPage() {
           name: url,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // placeholder; will update from mapping
+          unique_id: "", // Placeholder; will update from mapping
         })) || [];
 
       console.log("Fetching file-vectorstore mapping...");
@@ -119,7 +119,7 @@ export default function AdminPage() {
         unique_id: mapping[file.name] || "",
       }));
 
-      // Combine them all so that admin page displays all ingestions (URLs, PDFs, and Excel files)
+      // Combine all file objects (show all ingestions)
       const allFiles: File[] = [...mappedPdfFiles, ...mappedExcelFiles, ...mappedUrlFiles];
       setFiles(allFiles);
       console.log("Files after mapping:", allFiles);
@@ -145,7 +145,7 @@ export default function AdminPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setUploading(true);
-      // Allow multiple files
+      // Allow multiple files upload
       const filesToUpload = Array.from(e.target.files);
       console.log("Uploading files:", filesToUpload.map((f) => f.name).join(", "));
 
@@ -157,7 +157,6 @@ export default function AdminPage() {
           "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/upload",
           { method: "POST", body: formData }
         );
-
         if (!res.ok) throw new Error("Error uploading file(s).");
 
         const resData = await res.json();
@@ -175,7 +174,6 @@ export default function AdminPage() {
     }
   };
 
-  // New: Handle URL ingestion.
   const handleUrlIngestion = async () => {
     if (!urlInput.trim()) {
       toast.error("Please enter a URL.");
@@ -210,7 +208,6 @@ export default function AdminPage() {
 
     const selected = files.find((file) => file.id === selectedFile);
     console.log("Selected file for activation:", selected);
-
     if (!selected || !selected.unique_id) {
       toast.error("Selected file does not have a valid vectorstore.");
       return;
@@ -297,6 +294,33 @@ export default function AdminPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
+      {/* Loading Overlay */}
+      {uploading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white p-4 rounded shadow-md flex flex-col items-center space-y-2">
+            <svg
+              className="animate-spin h-8 w-8 text-blue-600"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              ></path>
+            </svg>
+            <p className="text-blue-600">Processing, please wait...</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="flex items-center justify-between p-3 sm:p-4 bg-white/80 backdrop-blur-sm shadow-sm">
         <div className="flex items-center space-x-2">
@@ -350,19 +374,20 @@ export default function AdminPage() {
             <ScrollArea className="h-[calc(100vh-16rem)] px-3 sm:px-6">
               <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
                 {/* Controls */}
-                <div className="flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0 pb-4 border-b">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pb-4 border-b">
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="allowPublicQueries"
                       checked={allowPublicQueries}
-                      onCheckedChange={(checked) => setAllowPublicQueries(checked as boolean)}
+                      onCheckedChange={(checked) =>
+                        setAllowPublicQueries(checked as boolean)
+                      }
                     />
                     <label htmlFor="allowPublicQueries" className="text-sm font-medium">
                       Allow Public Queries
                     </label>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    {/* New URL ingestion input */}
                     <Input
                       type="text"
                       placeholder="Enter URL to ingest"
@@ -395,7 +420,7 @@ export default function AdminPage() {
                   <h3 className="text-base sm:text-lg font-medium mb-2">
                     Upload File
                   </h3>
-                  <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
                     <label className="flex-1 flex items-center justify-center px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors duration-200">
                       <div className="flex flex-col items-center">
                         <Upload className="h-6 w-6 text-gray-500" />
