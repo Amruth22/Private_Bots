@@ -5,11 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Table,
@@ -68,13 +64,14 @@ export default function AdminPage() {
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
+      // Get PDFs, Excel files, and URLs (all types)
       const pdfFiles =
         data.uploaded_pdfs?.map((pdfName: string) => ({
           id: crypto.randomUUID(),
           name: pdfName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated
+          unique_id: "", // Placeholder; will update from mapping
         })) || [];
       const excelFiles =
         data.uploaded_excels?.map((excelName: string) => ({
@@ -82,7 +79,15 @@ export default function AdminPage() {
           name: excelName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated
+          unique_id: "", // Placeholder; will update from mapping
+        })) || [];
+      const urlFiles =
+        data.uploaded_urls?.map((url: string) => ({
+          id: crypto.randomUUID(),
+          name: url,
+          size: "Unknown",
+          uploadDate: new Date().toISOString().split("T")[0],
+          unique_id: "", // Placeholder; will update from mapping
         })) || [];
 
       console.log("Fetching file-vectorstore mapping...");
@@ -99,7 +104,7 @@ export default function AdminPage() {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
-      // Build file objects from PDFs and Excels only
+      // Build file objects for all types
       const mappedPdfFiles: File[] = pdfFiles.map((file) => ({
         ...file,
         unique_id: mapping[file.name] || "",
@@ -108,12 +113,13 @@ export default function AdminPage() {
         ...file,
         unique_id: mapping[file.name] || "",
       }));
+      const mappedUrlFiles: File[] = urlFiles.map((file) => ({
+        ...file,
+        unique_id: mapping[file.name] || "",
+      }));
 
-      // Exclude any file whose name starts with "http://" or "https://"
-      const allFiles: File[] = [...mappedPdfFiles, ...mappedExcelFiles].filter(
-        (file) =>
-          !file.name.startsWith("http://") && !file.name.startsWith("https://")
-      );
+      // Combine them all (do not filter out URLs now)
+      const allFiles: File[] = [...mappedPdfFiles, ...mappedExcelFiles, ...mappedUrlFiles];
 
       setFiles(allFiles);
       console.log("Files after mapping:", allFiles);
@@ -194,7 +200,6 @@ export default function AdminPage() {
         }
       );
       if (!res.ok) throw new Error("Failed to set active vectorstore.");
-
       const data = await res.json();
       console.log("Response from set_selected_vectorstore:", data);
       if (data.selected_vectorstore_id) {
@@ -282,7 +287,7 @@ export default function AdminPage() {
           </button>
         </div>
         <h1 className="text-lg sm:text-xl font-semibold text-gray-800 hidden sm:block">
-          File Management
+          Admin Settings
         </h1>
         <div className="flex items-center space-x-1 sm:space-x-2">
           <Button
@@ -323,7 +328,9 @@ export default function AdminPage() {
                     <Checkbox
                       id="allowPublicQueries"
                       checked={allowPublicQueries}
-                      onCheckedChange={(checked) => setAllowPublicQueries(checked as boolean)}
+                      onCheckedChange={(checked) =>
+                        setAllowPublicQueries(checked as boolean)
+                      }
                     />
                     <label htmlFor="allowPublicQueries" className="text-sm font-medium">
                       Allow Public Queries
@@ -394,12 +401,16 @@ export default function AdminPage() {
                           .map((file) => (
                             <TableRow
                               key={file.id}
-                              className={`hover:bg-gray-50 transition-colors duration-150 ${activeVectorstore === file.unique_id ? "bg-green-100" : ""}`}
+                              className={`hover:bg-gray-50 transition-colors duration-150 ${
+                                activeVectorstore === file.unique_id ? "bg-green-100" : ""
+                              }`}
                             >
                               <TableCell>
                                 <RadioGroup
                                   value={selectedFile}
-                                  onValueChange={(val) => handleSelectFile(val === file.id ? null : val)}
+                                  onValueChange={(val) =>
+                                    handleSelectFile(val === file.id ? null : val)
+                                  }
                                   className="flex items-center"
                                 >
                                   <RadioGroupItem value={file.id} id={`radio-${file.id}`} />
@@ -443,7 +454,8 @@ export default function AdminPage() {
                     <p className="text-green-800">
                       Active Vectorstore:{" "}
                       <span className="font-semibold">
-                        {files.find((file) => file.unique_id === activeVectorstore)?.name || activeVectorstore}
+                        {files.find((file) => file.unique_id === activeVectorstore)?.name ||
+                          activeVectorstore}
                       </span>
                     </p>
                   </div>
