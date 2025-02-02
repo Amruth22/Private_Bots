@@ -49,7 +49,7 @@ interface Message {
 interface FileOption {
   id: string;
   name: string;
-  unique_id: string; // Unique identifier for the vectorstore
+  unique_id: string; // Unique identifier for the vectorstore (non-empty when processed)
 }
 
 export default function ChatPage() {
@@ -62,7 +62,7 @@ export default function ChatPage() {
   const [selectedUniqueId, setSelectedUniqueId] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Define handler to navigate to admin page.
+  // Handler for navigating to Admin page
   const handleAdminPage = () => {
     router.push("/admin");
   };
@@ -125,9 +125,10 @@ export default function ChatPage() {
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
+      // Assume backend returns arrays for PDFs, Excel files, and URLs
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
-      const urls = data.uploaded_urls || []; // Include URL ingestions
+      const urls = data.uploaded_urls || [];
 
       console.log("Fetching file-vectorstore mapping...");
       const mappingRes = await fetch(
@@ -142,7 +143,7 @@ export default function ChatPage() {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
-      // Build file objects from PDFs, Excel files, and URLs.
+      // Build file objects for PDFs, Excel files, and URLs
       const pdfFiles: FileOption[] = pdfs.map((pdfName: string) => ({
         id: crypto.randomUUID(),
         name: pdfName,
@@ -155,12 +156,14 @@ export default function ChatPage() {
       }));
       const urlFiles: FileOption[] = urls.map((url: string) => ({
         id: crypto.randomUUID(),
-        name: url, // show URL as the file name
+        name: url, // show the URL as the file name
         unique_id: mapping[url] ? mapping[url].trim() : "",
       }));
 
-      // Combine all files (do not filter out URLs this time)
-      const allFiles: FileOption[] = [...pdfFiles, ...excelFiles, ...urlFiles];
+      // Combine all file objects (URLs will show if they have a non-empty unique_id)
+      const allFiles: FileOption[] = [...pdfFiles, ...excelFiles, ...urlFiles].filter(
+        (file) => file.unique_id.trim() !== ""
+      );
       setFiles(allFiles);
       console.log("Files after mapping:", allFiles);
 
@@ -295,7 +298,7 @@ export default function ChatPage() {
   };
 
   // ----------------------------------------------------------------
-  // 9. Handle logout and admin navigation
+  // 9. Handle logout and navigation
   // ----------------------------------------------------------------
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
@@ -324,42 +327,24 @@ export default function ChatPage() {
           Chat Assistant
         </h1>
         <div className="flex items-center space-x-1 sm:space-x-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleAdminPage}
-                  className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 transition-colors duration-300"
-                >
-                  <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="sr-only">Admin Settings</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Admin Settings</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLogout}
-                  className="text-gray-600 hover:text-red-600 hover:bg-red-100 transition-colors duration-300"
-                >
-                  <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="sr-only">Logout</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Log out</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleAdminPage}
+            className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 transition-colors duration-300"
+          >
+            <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="sr-only">Admin Settings</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="text-gray-600 hover:text-red-600 hover:bg-red-100 transition-colors duration-300"
+          >
+            <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="sr-only">Logout</span>
+          </Button>
         </div>
       </header>
 
@@ -406,8 +391,16 @@ export default function ChatPage() {
                   >
                     <div className={`flex items-start max-w-[80%] ${message.isUser ? "flex-row-reverse" : "flex-row"}`}>
                       <Avatar className={`w-10 h-10 ${message.isUser ? "ml-3" : "mr-3"} ring-2 ring-white shadow-md`}>
-                        <AvatarImage src={message.isUser ? "/path/to/user-avatar.png" : "/path/to/ai-avatar.png"} />
-                        <AvatarFallback>{message.isUser ? "U" : "AI"}</AvatarFallback>
+                        <AvatarImage
+                          src={
+                            message.isUser
+                              ? "/placeholder-user.png"
+                              : "/placeholder-ai.png"
+                          }
+                        />
+                        <AvatarFallback>
+                          {message.isUser ? "U" : "AI"}
+                        </AvatarFallback>
                       </Avatar>
                       <div className={`rounded-2xl overflow-hidden shadow-lg ${message.isUser ? "bg-gradient-to-br from-indigo-600 to-indigo-800" : "bg-gradient-to-br from-blue-50 to-indigo-50"}`}>
                         <div className={`p-3 sm:p-4 ${message.isUser ? "text-white" : "text-indigo-800"}`}>
@@ -473,21 +466,23 @@ export default function ChatPage() {
       <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-white/80 backdrop-blur-sm p-2 sm:p-4">
         <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
           <div className="flex space-x-2">
-            {/* Dropdown includes PDFs, Excels, and URL ingestions */}
+            {/* Dropdown includes PDFs, Excels, and URLs (only items with a non-empty unique_id) */}
             <div className="w-1/3">
               <Select onValueChange={handleSelectVectorstore} value={selectedUniqueId}>
                 <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm">
                   <SelectValue placeholder="Select file" />
                 </SelectTrigger>
                 <SelectContent>
-                  {files.map((file) => (
-                    <SelectItem key={file.id} value={file.unique_id}>
-                      <span className="flex items-center">
-                        <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
-                        {file.name}
-                      </span>
-                    </SelectItem>
-                  ))}
+                  {files
+                    .filter((file) => file.unique_id.trim() !== "")
+                    .map((file) => (
+                      <SelectItem key={file.id} value={file.unique_id}>
+                        <span className="flex items-center">
+                          <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
+                          {file.name}
+                        </span>
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
