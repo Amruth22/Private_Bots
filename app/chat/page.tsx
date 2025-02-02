@@ -121,7 +121,7 @@ export default function ChatPage() {
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
-      // Extract PDFs and Excels only (URLs are not included in selectable files)
+      // Get PDFs and Excel files arrays (exclude URL ingestions)
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
 
@@ -138,29 +138,21 @@ export default function ChatPage() {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
-      // Build file options from PDFs and Excels only.
+      // Build file objects only for PDFs and Excels.
       const pdfFiles: FileOption[] = pdfs.map((pdfName: string) => ({
         id: crypto.randomUUID(),
         name: pdfName,
-        unique_id:
-          mapping[pdfName] && mapping[pdfName].trim() !== ""
-            ? mapping[pdfName]
-            : "",
+        unique_id: mapping[pdfName] ? mapping[pdfName].trim() : "",
       }));
-
       const excelFiles: FileOption[] = excels.map((excelName: string) => ({
         id: crypto.randomUUID(),
         name: excelName,
-        unique_id:
-          mapping[excelName] && mapping[excelName].trim() !== ""
-            ? mapping[excelName]
-            : "",
+        unique_id: mapping[excelName] ? mapping[excelName].trim() : "",
       }));
 
-      // Combine PDFs and Excels, filtering out any entry that looks like a URL
+      // Combine PDFs and Excels and filter out files with an empty unique_id
       const allFiles: FileOption[] = [...pdfFiles, ...excelFiles].filter(
-        (file) =>
-          !file.name.startsWith("http://") && !file.name.startsWith("https://")
+        (file) => file.unique_id !== ""
       );
 
       setFiles(allFiles);
@@ -309,13 +301,19 @@ export default function ChatPage() {
     router.push("/");
   };
 
-  const handleAdminPage = () => {
-    router.push("/admin");
+  const handleChatPage = () => {
+    router.push("/chat");
   };
 
-  // ----------------------------------------------------------------
-  // 10. Main Render
-  // ----------------------------------------------------------------
+  const handleClearChatHistory = () => {
+    const confirmClear = window.confirm(
+      "Are you sure you want to clear your chat history? This action cannot be undone."
+    );
+    if (!confirmClear) return;
+    localStorage.removeItem("chatMessages");
+    toast.success("Chat history has been cleared.");
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
       {/* Header */}
@@ -339,7 +337,7 @@ export default function ChatPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleAdminPage}
+                  onClick={handleChatPage}
                   className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 transition-colors duration-300"
                 >
                   <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -351,7 +349,6 @@ export default function ChatPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -412,71 +409,30 @@ export default function ChatPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className={`flex ${
-                      message.isUser ? "justify-end" : "justify-start"
-                    } mb-4`}
+                    className={`flex ${message.isUser ? "justify-end" : "justify-start"} mb-4`}
                   >
-                    <div
-                      className={`flex items-start max-w-[80%] ${
-                        message.isUser ? "flex-row-reverse" : "flex-row"
-                      }`}
-                    >
-                      <Avatar
-                        className={`w-10 h-10 ${
-                          message.isUser ? "ml-3" : "mr-3"
-                        } ring-2 ring-white shadow-md`}
-                      >
-                        <AvatarImage
-                          src={
-                            message.isUser
-                              ? "/path/to/user-avatar.png"
-                              : "/path/to/ai-avatar.png"
-                          }
-                        />
-                        <AvatarFallback>
-                          {message.isUser ? "U" : "AI"}
-                        </AvatarFallback>
+                    <div className={`flex items-start max-w-[80%] ${message.isUser ? "flex-row-reverse" : "flex-row"}`}>
+                      <Avatar className={`w-10 h-10 ${message.isUser ? "ml-3" : "mr-3"} ring-2 ring-white shadow-md`}>
+                        <AvatarImage src={message.isUser ? "/path/to/user-avatar.png" : "/path/to/ai-avatar.png"} />
+                        <AvatarFallback>{message.isUser ? "U" : "AI"}</AvatarFallback>
                       </Avatar>
-                      <div
-                        className={`rounded-2xl overflow-hidden shadow-lg ${
-                          message.isUser
-                            ? "bg-gradient-to-br from-indigo-600 to-indigo-800"
-                            : "bg-gradient-to-br from-blue-50 to-indigo-50"
-                        }`}
-                      >
-                        <div
-                          className={`p-3 sm:p-4 ${
-                            message.isUser ? "text-white" : "text-indigo-800"
-                          }`}
-                        >
+                      <div className={`rounded-2xl overflow-hidden shadow-lg ${message.isUser ? "bg-gradient-to-br from-indigo-600 to-indigo-800" : "bg-gradient-to-br from-blue-50 to-indigo-50"}`}>
+                        <div className={`p-3 sm:p-4 ${message.isUser ? "text-white" : "text-indigo-800"}`}>
                           <ReactMarkdown
                             children={message.text}
                             remarkPlugins={[remarkGfm]}
                             components={{
                               a: ({ node, ...props }) => (
-                                <a
-                                  {...props}
-                                  className="text-blue-400 underline"
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                />
+                                <a {...props} className="text-blue-400 underline" target="_blank" rel="noopener noreferrer" />
                               ),
                               code: ({ node, inline, className, children, ...props }) => {
                                 const match = /language-(\w+)/.exec(className || "");
                                 return !inline && match ? (
-                                  <SyntaxHighlighter
-                                    style={materialLight}
-                                    language={match[1]}
-                                    PreTag="div"
-                                    {...props}
-                                  >
+                                  <SyntaxHighlighter style={materialLight} language={match[1]} PreTag="div" {...props}>
                                     {String(children).replace(/\n$/, "")}
                                   </SyntaxHighlighter>
                                 ) : (
-                                  <code
-                                    className="bg-gray-200 rounded px-1"
-                                    {...props}
-                                  >
+                                  <code className="bg-gray-200 rounded px-1" {...props}>
                                     {children}
                                   </code>
                                 );
@@ -484,13 +440,7 @@ export default function ChatPage() {
                             }}
                           />
                         </div>
-                        <div
-                          className={`px-3 py-1 sm:px-4 sm:py-2 text-[10px] sm:text-xs ${
-                            message.isUser
-                              ? "bg-indigo-900 text-blue-100"
-                              : "bg-indigo-100 text-indigo-700"
-                          }`}
-                        >
+                        <div className={`px-3 py-1 sm:px-4 sm:py-2 text-[10px] sm:text-xs ${message.isUser ? "bg-indigo-900 text-blue-100" : "bg-indigo-100 text-indigo-700"}`}>
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -530,24 +480,23 @@ export default function ChatPage() {
       <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-white/80 backdrop-blur-sm p-2 sm:p-4">
         <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
           <div className="flex space-x-2">
-            {/* Vectorstore Dropdown - only include files that are not URLs */}
+            {/* Dropdown - only include files with a non-empty unique_id */}
             <div className="w-1/3">
-              <Select
-                onValueChange={handleSelectVectorstore}
-                value={selectedUniqueId}
-              >
+              <Select onValueChange={handleSelectVectorstore} value={selectedUniqueId}>
                 <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm">
                   <SelectValue placeholder="Select file" />
                 </SelectTrigger>
                 <SelectContent>
-                  {files.map((file) => (
-                    <SelectItem key={file.id} value={file.unique_id}>
-                      <span className="flex items-center">
-                        <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
-                        {file.name}
-                      </span>
-                    </SelectItem>
-                  ))}
+                  {files
+                    .filter((file) => file.unique_id.trim() !== "")
+                    .map((file) => (
+                      <SelectItem key={file.id} value={file.unique_id}>
+                        <span className="flex items-center">
+                          <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
+                          {file.name}
+                        </span>
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -572,7 +521,6 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Progress Bar */}
           {isLoading && (
             <div className="relative pt-1 my-2">
               <div className="flex mb-1 items-center justify-between">
