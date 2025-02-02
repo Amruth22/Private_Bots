@@ -36,6 +36,8 @@ import { materialLight } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+import { useRouter as useNextRouter } from "next/navigation";
+
 // Define the structure of a chat message
 interface Message {
   id: string;
@@ -53,15 +55,12 @@ interface FileOption {
 
 export default function ChatPage() {
   const router = useRouter();
-
-  // State variables
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [files, setFiles] = useState<FileOption[]>([]);
   const [selectedUniqueId, setSelectedUniqueId] = useState<string>("");
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ----------------------------------------------------------------
@@ -74,7 +73,6 @@ export default function ChatPage() {
       return;
     }
 
-    // Load messages from localStorage
     const savedMessages = localStorage.getItem("chatMessages");
     if (savedMessages) {
       try {
@@ -86,11 +84,10 @@ export default function ChatPage() {
         setMessages(restored);
       } catch (error) {
         console.error("Failed to parse saved messages:", error);
-        localStorage.removeItem("chatMessages"); // Clear corrupted data
+        localStorage.removeItem("chatMessages");
       }
     }
 
-    // Fetch the list of files from the backend
     fetchUploadedFiles();
   }, [router]);
 
@@ -118,17 +115,16 @@ export default function ChatPage() {
   async function fetchUploadedFiles() {
     try {
       console.log("Fetching uploaded files...");
-      // 4a. Fetch uploaded PDFs and Excels
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files"
       );
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
+      // Extract PDFs and Excels only (URLs are not included in selectable files)
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
 
-      // 4b. Fetch file-vectorstore mapping
       console.log("Fetching file-vectorstore mapping...");
       const mappingRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping"
@@ -142,30 +138,40 @@ export default function ChatPage() {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
-      // 4c. Combine them into one array
-      const allFiles: FileOption[] = [
-        ...pdfs.map((pdfName: string) => ({
-          id: crypto.randomUUID(),
-          name: pdfName,
-          unique_id: mapping[pdfName] || "",
-        })),
-        ...excels.map((excelName: string) => ({
-          id: crypto.randomUUID(),
-          name: excelName,
-          unique_id: mapping[excelName] || "",
-        })),
-      ];
+      // Build file options from PDFs and Excels only.
+      const pdfFiles: FileOption[] = pdfs.map((pdfName: string) => ({
+        id: crypto.randomUUID(),
+        name: pdfName,
+        unique_id:
+          mapping[pdfName] && mapping[pdfName].trim() !== ""
+            ? mapping[pdfName]
+            : "",
+      }));
+
+      const excelFiles: FileOption[] = excels.map((excelName: string) => ({
+        id: crypto.randomUUID(),
+        name: excelName,
+        unique_id:
+          mapping[excelName] && mapping[excelName].trim() !== ""
+            ? mapping[excelName]
+            : "",
+      }));
+
+      // Combine PDFs and Excels, filtering out any entry that looks like a URL
+      const allFiles: FileOption[] = [...pdfFiles, ...excelFiles].filter(
+        (file) =>
+          !file.name.startsWith("http://") && !file.name.startsWith("https://")
+      );
 
       setFiles(allFiles);
       console.log("Files after mapping:", allFiles);
 
-      // 4d. Optionally set the first file as default selected
+      // Optionally set the first file with a valid unique_id as the default selected
       if (allFiles.length > 0) {
-        const firstValid = allFiles.find((file) => file.unique_id);
+        const firstValid = allFiles.find((file) => file.unique_id.trim() !== "");
         if (firstValid) {
           setSelectedUniqueId(firstValid.unique_id);
           console.log("Default selected unique_id:", firstValid.unique_id);
-          // Automatically set the first vectorstore as active
           await setSelectedVectorstore(firstValid.unique_id);
         }
       }
@@ -189,12 +195,6 @@ export default function ChatPage() {
           body: JSON.stringify({ unique_id: newUniqueId }),
         }
       );
-
-      // Removed error throwing on non-OK responses
-      // if (!res.ok) {
-      //   throw new Error("Failed to set active vectorstore.");
-      // }
-
       const data = await res.json();
       console.log("Vectorstore set successfully:", data.selected_vectorstore_id);
 
@@ -202,16 +202,13 @@ export default function ChatPage() {
       const selectedFile = files.find(
         (file) => file.unique_id === data.selected_vectorstore_id
       );
-
       if (selectedFile) {
         toast.success(`Active vectorstore set to "${selectedFile.name}"`, {
           autoClose: 1500,
         });
-      } 
+      }
     } catch (error) {
       console.error("Error setting vectorstore:", error);
-      // Removed the error toast as per your request
-      // toast.error("Failed to set the active vectorstore.");
     }
   };
 
@@ -231,7 +228,6 @@ export default function ChatPage() {
     e.preventDefault();
     if (!inputMessage.trim() || isLoading) return;
 
-    // Construct user message
     const userMsg: Message = {
       id: Date.now().toString(),
       text: inputMessage,
@@ -242,7 +238,6 @@ export default function ChatPage() {
     setInputMessage("");
     setIsLoading(true);
 
-    // Start a simulated progress bar
     setProgress(0);
     const interval = setInterval(() => {
       setProgress((prev) => (prev < 90 ? prev + 10 : 90));
@@ -250,14 +245,13 @@ export default function ChatPage() {
 
     try {
       console.log("Sending message to /ask with unique_id:", selectedUniqueId);
-      // POST question to /ask, including the selected unique_id for the vectorstore
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/ask",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            question: userMsg.text,
+            question: inputMessage,
             unique_id: selectedUniqueId,
           }),
         }
@@ -267,11 +261,9 @@ export default function ChatPage() {
       if (!res.ok) {
         throw new Error("Error from /ask endpoint");
       }
-
       const data = await res.json();
       console.log("Response from /ask:", data);
 
-      // Add AI's response
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: data.answer || "No response from AI",
@@ -280,7 +272,6 @@ export default function ChatPage() {
       };
       setMessages((prev) => [...prev, aiMsg]);
 
-      // Finish progress bar
       setProgress(100);
       setTimeout(() => setProgress(0), 500);
     } catch (error) {
@@ -331,7 +322,7 @@ export default function ChatPage() {
       <header className="fixed top-0 left-0 right-0 z-10 flex items-center justify-between p-2 sm:p-4 bg-gradient-to-r from-white/90 to-blue-50/90 backdrop-blur-sm shadow-sm transition-all duration-300">
         <div className="flex items-center space-x-2 transition-transform duration-300 hover:scale-105">
           <Image
-            src="/path/to/your/logo.png" // Replace with your logo path
+            src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/logo_cresol%20(5)-YuOOsUQjnFH4cLQWJWAm0hxlK2UYQ9.png"
             alt="Logo"
             width={100}
             height={30}
@@ -342,7 +333,6 @@ export default function ChatPage() {
           Chat Assistant
         </h1>
         <div className="flex items-center space-x-1 sm:space-x-2">
-          {/* Admin Settings */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -362,7 +352,6 @@ export default function ChatPage() {
             </Tooltip>
           </TooltipProvider>
 
-          {/* Logout */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -440,8 +429,8 @@ export default function ChatPage() {
                         <AvatarImage
                           src={
                             message.isUser
-                              ? "/path/to/user-avatar.png" // Replace with your user avatar path
-                              : "/path/to/ai-avatar.png" // Replace with your AI avatar path
+                              ? "/path/to/user-avatar.png"
+                              : "/path/to/ai-avatar.png"
                           }
                         />
                         <AvatarFallback>
@@ -472,16 +461,8 @@ export default function ChatPage() {
                                   rel="noopener noreferrer"
                                 />
                               ),
-                              code: ({
-                                node,
-                                inline,
-                                className,
-                                children,
-                                ...props
-                              }) => {
-                                const match = /language-(\w+)/.exec(
-                                  className || ""
-                                );
+                              code: ({ node, inline, className, children, ...props }) => {
+                                const match = /language-(\w+)/.exec(className || "");
                                 return !inline && match ? (
                                   <SyntaxHighlighter
                                     style={materialLight}
@@ -549,10 +530,10 @@ export default function ChatPage() {
       <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-white/80 backdrop-blur-sm p-2 sm:p-4">
         <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
           <div className="flex space-x-2">
-            {/* 1. Vectorstore Dropdown */}
+            {/* Vectorstore Dropdown - only include files that are not URLs */}
             <div className="w-1/3">
               <Select
-                onValueChange={handleSelectVectorstore} // Automatically triggers the POST request
+                onValueChange={handleSelectVectorstore}
                 value={selectedUniqueId}
               >
                 <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm">
@@ -571,7 +552,7 @@ export default function ChatPage() {
               </Select>
             </div>
 
-            {/* 2. Chat Input and Send Button */}
+            {/* Chat Input and Send Button */}
             <div className="relative flex-1">
               <Input
                 value={inputMessage}
@@ -591,7 +572,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* 3. Progress Bar for AI thinking */}
+          {/* Progress Bar */}
           {isLoading && (
             <div className="relative pt-1 my-2">
               <div className="flex mb-1 items-center justify-between">
@@ -617,8 +598,11 @@ export default function ChatPage() {
         </form>
       </footer>
 
-      {/* Toast Container for Notifications */}
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar />
     </div>
   );
+}
+
+function formatTime(date: Date) {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
