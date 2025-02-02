@@ -3,6 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { materialLight } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 import {
   SendIcon,
   MessageSquare,
@@ -28,15 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { motion } from "framer-motion";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { materialLight } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
-import { useRouter as useNextRouter } from "next/navigation";
 
 // Define the structure of a chat message
 interface Message {
@@ -62,6 +61,11 @@ export default function ChatPage() {
   const [files, setFiles] = useState<FileOption[]>([]);
   const [selectedUniqueId, setSelectedUniqueId] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Define handler to navigate to admin page.
+  const handleAdminPage = () => {
+    router.push("/admin");
+  };
 
   // ----------------------------------------------------------------
   // 1. Ensure user is logged in, load chat messages, and fetch file list
@@ -121,9 +125,9 @@ export default function ChatPage() {
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
-      // Get PDFs and Excel files arrays (exclude URL ingestions)
       const pdfs = data.uploaded_pdfs || [];
       const excels = data.uploaded_excels || [];
+      const urls = data.uploaded_urls || []; // Include URL ingestions
 
       console.log("Fetching file-vectorstore mapping...");
       const mappingRes = await fetch(
@@ -138,7 +142,7 @@ export default function ChatPage() {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
-      // Build file objects only for PDFs and Excels.
+      // Build file objects from PDFs, Excel files, and URLs.
       const pdfFiles: FileOption[] = pdfs.map((pdfName: string) => ({
         id: crypto.randomUUID(),
         name: pdfName,
@@ -149,12 +153,14 @@ export default function ChatPage() {
         name: excelName,
         unique_id: mapping[excelName] ? mapping[excelName].trim() : "",
       }));
+      const urlFiles: FileOption[] = urls.map((url: string) => ({
+        id: crypto.randomUUID(),
+        name: url, // show URL as the file name
+        unique_id: mapping[url] ? mapping[url].trim() : "",
+      }));
 
-      // Combine PDFs and Excels and filter out files with an empty unique_id
-      const allFiles: FileOption[] = [...pdfFiles, ...excelFiles].filter(
-        (file) => file.unique_id !== ""
-      );
-
+      // Combine all files (do not filter out URLs this time)
+      const allFiles: FileOption[] = [...pdfFiles, ...excelFiles, ...urlFiles];
       setFiles(allFiles);
       console.log("Files after mapping:", allFiles);
 
@@ -189,7 +195,6 @@ export default function ChatPage() {
       );
       const data = await res.json();
       console.log("Vectorstore set successfully:", data.selected_vectorstore_id);
-
       // Find the file name associated with the unique_id
       const selectedFile = files.find(
         (file) => file.unique_id === data.selected_vectorstore_id
@@ -248,14 +253,12 @@ export default function ChatPage() {
           }),
         }
       );
-
       setProgress(95);
       if (!res.ok) {
         throw new Error("Error from /ask endpoint");
       }
       const data = await res.json();
       console.log("Response from /ask:", data);
-
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         text: data.answer || "No response from AI",
@@ -263,7 +266,6 @@ export default function ChatPage() {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiMsg]);
-
       setProgress(100);
       setTimeout(() => setProgress(0), 500);
     } catch (error) {
@@ -305,15 +307,6 @@ export default function ChatPage() {
     router.push("/chat");
   };
 
-  const handleClearChatHistory = () => {
-    const confirmClear = window.confirm(
-      "Are you sure you want to clear your chat history? This action cannot be undone."
-    );
-    if (!confirmClear) return;
-    localStorage.removeItem("chatMessages");
-    toast.success("Chat history has been cleared.");
-  };
-
   return (
     <div className="flex flex-col h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
       {/* Header */}
@@ -337,7 +330,7 @@ export default function ChatPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleChatPage}
+                  onClick={handleAdminPage}
                   className="text-gray-600 hover:text-blue-600 hover:bg-blue-100 transition-colors duration-300"
                 >
                   <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -480,23 +473,21 @@ export default function ChatPage() {
       <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-white/80 backdrop-blur-sm p-2 sm:p-4">
         <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
           <div className="flex space-x-2">
-            {/* Dropdown - only include files with a non-empty unique_id */}
+            {/* Dropdown includes PDFs, Excels, and URL ingestions */}
             <div className="w-1/3">
               <Select onValueChange={handleSelectVectorstore} value={selectedUniqueId}>
                 <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm">
                   <SelectValue placeholder="Select file" />
                 </SelectTrigger>
                 <SelectContent>
-                  {files
-                    .filter((file) => file.unique_id.trim() !== "")
-                    .map((file) => (
-                      <SelectItem key={file.id} value={file.unique_id}>
-                        <span className="flex items-center">
-                          <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
-                          {file.name}
-                        </span>
-                      </SelectItem>
-                    ))}
+                  {files.map((file) => (
+                    <SelectItem key={file.id} value={file.unique_id}>
+                      <span className="flex items-center">
+                        <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
+                        {file.name}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
