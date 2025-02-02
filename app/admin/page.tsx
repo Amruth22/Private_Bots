@@ -61,7 +61,6 @@ export default function AdminPage() {
   async function fetchFilesFromBackend() {
     try {
       console.log("Fetching uploaded files...");
-      // Fetch files from the backend endpoint
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files",
         { method: "GET" }
@@ -69,23 +68,21 @@ export default function AdminPage() {
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
-      // Build file objects for PDFs and Excel files only
-      const pdfFiles: File[] =
+      const pdfFiles =
         data.uploaded_pdfs?.map((pdfName: string) => ({
           id: crypto.randomUUID(),
           name: pdfName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // placeholder; will update from mapping
+          unique_id: "", // Placeholder, will be updated
         })) || [];
-
-      const excelFiles: File[] =
+      const excelFiles =
         data.uploaded_excels?.map((excelName: string) => ({
           id: crypto.randomUUID(),
           name: excelName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // placeholder; will update from mapping
+          unique_id: "", // Placeholder, will be updated
         })) || [];
 
       console.log("Fetching file-vectorstore mapping...");
@@ -93,7 +90,6 @@ export default function AdminPage() {
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping",
         { method: "GET" }
       );
-
       let mapping: { [key: string]: string } = {};
       if (mappingRes.ok) {
         const mappingData = await mappingRes.json();
@@ -103,18 +99,17 @@ export default function AdminPage() {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
-      // Build file objects for PDFs and Excels, filtering out URL-like names.
+      // Build file objects from PDFs and Excels only
       const mappedPdfFiles: File[] = pdfFiles.map((file) => ({
         ...file,
         unique_id: mapping[file.name] || "",
       }));
-
       const mappedExcelFiles: File[] = excelFiles.map((file) => ({
         ...file,
         unique_id: mapping[file.name] || "",
       }));
 
-      // Exclude entries whose name starts with "http://" or "https://"
+      // Exclude any file whose name starts with "http://" or "https://"
       const allFiles: File[] = [...mappedPdfFiles, ...mappedExcelFiles].filter(
         (file) =>
           !file.name.startsWith("http://") && !file.name.startsWith("https://")
@@ -287,7 +282,7 @@ export default function AdminPage() {
           </button>
         </div>
         <h1 className="text-lg sm:text-xl font-semibold text-gray-800 hidden sm:block">
-          Admin Settings
+          File Management
         </h1>
         <div className="flex items-center space-x-1 sm:space-x-2">
           <Button
@@ -328,9 +323,7 @@ export default function AdminPage() {
                     <Checkbox
                       id="allowPublicQueries"
                       checked={allowPublicQueries}
-                      onCheckedChange={(checked) =>
-                        setAllowPublicQueries(checked as boolean)
-                      }
+                      onCheckedChange={(checked) => setAllowPublicQueries(checked as boolean)}
                     />
                     <label htmlFor="allowPublicQueries" className="text-sm font-medium">
                       Allow Public Queries
@@ -401,16 +394,12 @@ export default function AdminPage() {
                           .map((file) => (
                             <TableRow
                               key={file.id}
-                              className={`hover:bg-gray-50 transition-colors duration-150 ${
-                                activeVectorstore === file.unique_id ? "bg-green-100" : ""
-                              }`}
+                              className={`hover:bg-gray-50 transition-colors duration-150 ${activeVectorstore === file.unique_id ? "bg-green-100" : ""}`}
                             >
                               <TableCell>
                                 <RadioGroup
                                   value={selectedFile}
-                                  onValueChange={(val) =>
-                                    handleSelectFile(val === file.id ? null : val)
-                                  }
+                                  onValueChange={(val) => handleSelectFile(val === file.id ? null : val)}
                                   className="flex items-center"
                                 >
                                   <RadioGroupItem value={file.id} id={`radio-${file.id}`} />
@@ -454,8 +443,7 @@ export default function AdminPage() {
                     <p className="text-green-800">
                       Active Vectorstore:{" "}
                       <span className="font-semibold">
-                        {files.find((file) => file.unique_id === activeVectorstore)?.name ||
-                          activeVectorstore}
+                        {files.find((file) => file.unique_id === activeVectorstore)?.name || activeVectorstore}
                       </span>
                     </p>
                   </div>
@@ -483,4 +471,8 @@ export default function AdminPage() {
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar />
     </div>
   );
+}
+
+function formatTime(date: Date) {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
