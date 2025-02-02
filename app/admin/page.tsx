@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [uploading, setUploading] = useState<boolean>(false);
   const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null);
+  const [urlInput, setUrlInput] = useState<string>("");
 
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -64,14 +65,14 @@ export default function AdminPage() {
       if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
-      // Get PDFs, Excel files, and URLs (all types)
+      // Backend returns three arrays: PDFs, Excels, and URLs.
       const pdfFiles =
         data.uploaded_pdfs?.map((pdfName: string) => ({
           id: crypto.randomUUID(),
           name: pdfName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder; will update from mapping
+          unique_id: "", // placeholder; will update from mapping
         })) || [];
       const excelFiles =
         data.uploaded_excels?.map((excelName: string) => ({
@@ -79,7 +80,7 @@ export default function AdminPage() {
           name: excelName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder; will update from mapping
+          unique_id: "", // placeholder; will update from mapping
         })) || [];
       const urlFiles =
         data.uploaded_urls?.map((url: string) => ({
@@ -87,7 +88,7 @@ export default function AdminPage() {
           name: url,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder; will update from mapping
+          unique_id: "", // placeholder; will update from mapping
         })) || [];
 
       console.log("Fetching file-vectorstore mapping...");
@@ -118,9 +119,8 @@ export default function AdminPage() {
         unique_id: mapping[file.name] || "",
       }));
 
-      // Combine them all (do not filter out URLs now)
+      // Combine them all so that admin page displays all ingestions (URLs, PDFs, and Excel files)
       const allFiles: File[] = [...mappedPdfFiles, ...mappedExcelFiles, ...mappedUrlFiles];
-
       setFiles(allFiles);
       console.log("Files after mapping:", allFiles);
 
@@ -145,33 +145,60 @@ export default function AdminPage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setUploading(true);
-      const file = e.target.files[0];
-      console.log("Uploading file:", file.name);
+      // Allow multiple files
+      const filesToUpload = Array.from(e.target.files);
+      console.log("Uploading files:", filesToUpload.map((f) => f.name).join(", "));
 
       try {
         const formData = new FormData();
-        formData.append("files", file);
+        filesToUpload.forEach((file) => formData.append("files", file));
 
         const res = await fetch(
           "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/upload",
           { method: "POST", body: formData }
         );
 
-        if (!res.ok) throw new Error("Error uploading file.");
+        if (!res.ok) throw new Error("Error uploading file(s).");
 
         const resData = await res.json();
         console.log("Upload response:", resData);
-
-        toast.success(`File "${file.name}" uploaded successfully.`);
+        toast.success(`File(s) uploaded successfully.`);
         await fetchFilesFromBackend();
       } catch (error) {
         console.error("Upload error:", error);
-        toast.error("Failed to upload file.");
+        toast.error("Failed to upload file(s).");
         toast.error("Wait for 30 seconds to get processed.");
       } finally {
         setUploading(false);
         e.target.value = "";
       }
+    }
+  };
+
+  // New: Handle URL ingestion.
+  const handleUrlIngestion = async () => {
+    if (!urlInput.trim()) {
+      toast.error("Please enter a URL.");
+      return;
+    }
+    try {
+      const res = await fetch(
+        "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/ingest_url",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: urlInput.trim() }),
+        }
+      );
+      if (!res.ok) throw new Error("Error ingesting URL");
+      const data = await res.json();
+      console.log("URL ingestion response:", data);
+      toast.success(`URL "${urlInput.trim()}" ingested successfully.`);
+      setUrlInput("");
+      await fetchFilesFromBackend();
+    } catch (error) {
+      console.error("URL ingestion error:", error);
+      toast.error("Failed to ingest URL.");
     }
   };
 
@@ -323,18 +350,34 @@ export default function AdminPage() {
             <ScrollArea className="h-[calc(100vh-16rem)] px-3 sm:px-6">
               <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
                 {/* Controls */}
-                <div className="flex items-center justify-between space-x-2 pb-4 border-b">
+                <div className="flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0 pb-4 border-b">
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="allowPublicQueries"
                       checked={allowPublicQueries}
-                      onCheckedChange={(checked) =>
-                        setAllowPublicQueries(checked as boolean)
-                      }
+                      onCheckedChange={(checked) => setAllowPublicQueries(checked as boolean)}
                     />
                     <label htmlFor="allowPublicQueries" className="text-sm font-medium">
                       Allow Public Queries
                     </label>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {/* New URL ingestion input */}
+                    <Input
+                      type="text"
+                      placeholder="Enter URL to ingest"
+                      value={urlInput}
+                      onChange={(e) => setUrlInput(e.target.value)}
+                      className="w-full sm:w-64"
+                    />
+                    <Button
+                      onClick={handleUrlIngestion}
+                      variant="default"
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      Ingest URL
+                    </Button>
                   </div>
                   <Button
                     onClick={handleSetActiveVectorstore}
@@ -356,7 +399,7 @@ export default function AdminPage() {
                     <label className="flex-1 flex items-center justify-center px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors duration-200">
                       <div className="flex flex-col items-center">
                         <Upload className="h-6 w-6 text-gray-500" />
-                        <p className="mt-2 text-gray-500">Click to upload a file</p>
+                        <p className="mt-2 text-gray-500">Click to upload files</p>
                         <p className="mt-1 text-xs text-gray-400">(PDF, Excel)</p>
                       </div>
                       <input
@@ -364,6 +407,7 @@ export default function AdminPage() {
                         accept=".pdf,.xlsx,.xls"
                         onChange={handleFileUpload}
                         className="hidden"
+                        multiple
                         disabled={uploading}
                       />
                     </label>
@@ -408,9 +452,7 @@ export default function AdminPage() {
                               <TableCell>
                                 <RadioGroup
                                   value={selectedFile}
-                                  onValueChange={(val) =>
-                                    handleSelectFile(val === file.id ? null : val)
-                                  }
+                                  onValueChange={(val) => handleSelectFile(val === file.id ? null : val)}
                                   className="flex items-center"
                                 >
                                   <RadioGroupItem value={file.id} id={`radio-${file.id}`} />
