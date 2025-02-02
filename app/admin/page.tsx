@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Ensure these components are correctly implemented
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Table,
   TableBody,
@@ -28,7 +28,7 @@ import {
   Trash,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox"; // Ensure Checkbox is correctly implemented
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -44,10 +44,10 @@ export default function AdminPage() {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [allowPublicQueries, setAllowPublicQueries] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null); // Single selection
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null); // To display active vectorstore
+  const [activeVectorstore, setActiveVectorstore] = useState<string | null>(null);
 
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -61,17 +61,12 @@ export default function AdminPage() {
   async function fetchFilesFromBackend() {
     try {
       console.log("Fetching uploaded files...");
-      // Fetch uploaded files
       const res = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/list_uploaded_files",
-        {
-          method: "GET",
-        }
+        { method: "GET" }
       );
 
-      if (!res.ok) {
-        throw new Error("Failed to fetch file list.");
-      }
+      if (!res.ok) throw new Error("Failed to fetch file list.");
 
       const data = await res.json();
       const pdfFiles =
@@ -80,7 +75,7 @@ export default function AdminPage() {
           name: pdfName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated
+          unique_id: "", // Placeholder
         })) || [];
 
       const excelFiles =
@@ -89,16 +84,13 @@ export default function AdminPage() {
           name: excelName,
           size: "Unknown",
           uploadDate: new Date().toISOString().split("T")[0],
-          unique_id: "", // Placeholder, will be updated
+          unique_id: "", // Placeholder
         })) || [];
 
       console.log("Fetching file-vectorstore mapping...");
-      // Fetch file-vectorstore mapping
       const mappingRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/file_vectorstore_mapping",
-        {
-          method: "GET",
-        }
+        { method: "GET" }
       );
 
       let mapping: { [key: string]: string } = {};
@@ -110,27 +102,29 @@ export default function AdminPage() {
         console.warn("Failed to fetch file-vectorstore mapping.");
       }
 
-      // Assign unique_id to each file
-      const mappedPdfFiles = pdfFiles.map((file) => ({
+      // Build file objects from PDFs and Excels only, filtering out URL-like names
+      const mappedPdfFiles: File[] = pdfFiles.map((file) => ({
+        ...file,
+        unique_id: mapping[file.name] || "",
+      }));
+      const mappedExcelFiles: File[] = excelFiles.map((file) => ({
         ...file,
         unique_id: mapping[file.name] || "",
       }));
 
-      const mappedExcelFiles = excelFiles.map((file) => ({
-        ...file,
-        unique_id: mapping[file.name] || "",
-      }));
+      // Exclude any file whose name starts with "http://" or "https://"
+      const allFiles: File[] = [...mappedPdfFiles, ...mappedExcelFiles].filter(
+        (file) =>
+          !file.name.startsWith("http://") && !file.name.startsWith("https://")
+      );
 
-      setFiles([...mappedPdfFiles, ...mappedExcelFiles]);
-      console.log("Files after mapping:", [...mappedPdfFiles, ...mappedExcelFiles]);
+      setFiles(allFiles);
+      console.log("Files after mapping:", allFiles);
 
-      // Fetch the currently active vectorstore
       console.log("Fetching currently active vectorstore...");
       const activeRes = await fetch(
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/current_vectorstore",
-        {
-          method: "GET",
-        }
+        { method: "GET" }
       );
 
       if (activeRes.ok) {
@@ -146,7 +140,6 @@ export default function AdminPage() {
     }
   }
 
-  // Handle file upload with uploading state and feedback
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setUploading(true);
@@ -159,21 +152,15 @@ export default function AdminPage() {
 
         const res = await fetch(
           "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/upload",
-          {
-            method: "POST",
-            body: formData,
-          }
+          { method: "POST", body: formData }
         );
 
-        if (!res.ok) {
-          throw new Error("Error uploading file.");
-        }
+        if (!res.ok) throw new Error("Error uploading file.");
 
         const resData = await res.json();
         console.log("Upload response:", resData);
 
         toast.success(`File "${file.name}" uploaded successfully.`);
-        // Refresh file list to show newly uploaded file(s)
         await fetchFilesFromBackend();
       } catch (error) {
         console.error("Upload error:", error);
@@ -186,7 +173,6 @@ export default function AdminPage() {
     }
   };
 
-  // Handle setting the selected file as active vectorstore
   const handleSetActiveVectorstore = async () => {
     if (!selectedFile) {
       toast.error("Please select a file to set as active vectorstore.");
@@ -207,16 +193,12 @@ export default function AdminPage() {
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/set_selected_vectorstore",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ unique_id: selected.unique_id }),
         }
       );
 
-      if (!res.ok) {
-        throw new Error("Failed to set active vectorstore.");
-      }
+      if (!res.ok) throw new Error("Failed to set active vectorstore.");
 
       const data = await res.json();
       console.log("Response from set_selected_vectorstore:", data);
@@ -229,12 +211,9 @@ export default function AdminPage() {
       }
     } catch (error: any) {
       console.error("Error setting active vectorstore:", error);
-      // Removed the error toast as per your request
-      // toast.error("Failed to set active vectorstore.");
     }
   };
 
-  // Handle deleting a single file
   const handleDeleteFile = async (id: string) => {
     const fileToDelete = files.find((file) => file.id === id);
     console.log("Attempting to delete file:", fileToDelete);
@@ -249,25 +228,19 @@ export default function AdminPage() {
         "https://custom-gpt-azures-fix-406df467a391.herokuapp.com/delete_vectorstore",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ filename: fileToDelete.name }),
         }
       );
 
-      if (!res.ok) {
-        throw new Error("Failed to delete file.");
-      }
+      if (!res.ok) throw new Error("Failed to delete file.");
 
       const data = await res.json();
       console.log("Delete response:", data);
 
-      // Update the frontend state
       setFiles(files.filter((file) => file.id !== id));
-      setSelectedFile(null); // Clear selection if the deleted file was selected
+      setSelectedFile(null);
 
-      // If the deleted file was the active vectorstore, update the activeVectorstore state
       if (activeVectorstore === fileToDelete.unique_id) {
         setActiveVectorstore(null);
         toast.info("Active vectorstore has been deleted.");
@@ -280,9 +253,8 @@ export default function AdminPage() {
     }
   };
 
-  // Handle selecting a single file (radio button behavior)
   const handleSelectFile = (id: string) => {
-    setSelectedFile(id === selectedFile ? null : id); // Toggle selection
+    setSelectedFile(id === selectedFile ? null : id);
     console.log("SelectedFile state updated to:", id === selectedFile ? null : id);
   };
 
@@ -307,34 +279,6 @@ export default function AdminPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 bg-gradient-to-br from-gray-100 to-gray-200">
-      {/* Loading overlay */}
-      {uploading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white p-4 rounded shadow-md flex flex-col items-center space-y-2">
-            <svg
-              className="animate-spin h-6 w-6 text-indigo-500"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              ></circle>
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8H4z"
-              ></path>
-            </svg>
-            <p className="text-gray-700">Uploading your file, please wait...</p>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <header className="flex items-center justify-between p-3 sm:p-4 bg-white/80 backdrop-blur-sm shadow-sm">
         <div className="flex items-center space-x-2">
@@ -352,7 +296,7 @@ export default function AdminPage() {
           </button>
         </div>
         <h1 className="text-lg sm:text-xl font-semibold text-gray-800 hidden sm:block">
-          Admin Settings
+          Chat Assistant
         </h1>
         <div className="flex items-center space-x-1 sm:space-x-2">
           <Button
@@ -376,196 +320,223 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 p-2 sm:p-4 md:p-6 overflow-hidden">
-        <div className="max-w-4xl mx-auto h-full">
-          <Card className="bg-white/80 backdrop-blur-sm shadow-lg h-full overflow-hidden">
-            <CardHeader className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b p-3 sm:p-4">
-              <CardTitle className="text-xl sm:text-2xl text-[#4F46E5]">
-                File Management
-              </CardTitle>
-            </CardHeader>
-            <ScrollArea className="h-[calc(100vh-16rem)] px-3 sm:px-6">
-              <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
-                {/* Controls */}
-                <div className="flex items-center justify-between space-x-2 pb-4 border-b">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="allowPublicQueries"
-                      checked={allowPublicQueries}
-                      onCheckedChange={(checked) =>
-                        setAllowPublicQueries(checked as boolean)
-                      }
-                    />
-                    <label
-                      htmlFor="allowPublicQueries"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+      {/* Main Chat Area */}
+      <main className="flex-1 overflow-hidden p-2 sm:p-4 pt-16 sm:pt-20">
+        <Card className="h-full bg-white/80 backdrop-blur-sm shadow-lg overflow-hidden">
+          <ScrollArea className="h-[calc(100vh-8rem)] sm:h-[calc(100vh-9rem)] p-2 sm:p-4 bg-gradient-to-b from-blue-50 to-white bg-opacity-50">
+            <div className="space-y-4 sm:space-y-6 py-4 sm:py-6">
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full space-y-4">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.5 }}
+                    className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center"
+                  >
+                    <MessageSquare className="w-8 h-8 text-white" />
+                  </motion.div>
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5, duration: 0.5 }}
+                    className="text-center text-gray-600 font-medium"
+                  >
+                    No messages yet. Start a conversation!
+                  </motion.p>
+                  <motion.div
+                    animate={{ scale: [1, 1.1, 1] }}
+                    transition={{
+                      repeat: Number.POSITIVE_INFINITY,
+                      duration: 1.5,
+                    }}
+                    className="w-3 h-3 bg-blue-500 rounded-full"
+                  />
+                </div>
+              ) : (
+                messages.map((message) => (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className={`flex ${message.isUser ? "justify-end" : "justify-start"} mb-4`}
+                  >
+                    <div
+                      className={`flex items-start max-w-[80%] ${
+                        message.isUser ? "flex-row-reverse" : "flex-row"
+                      }`}
                     >
-                      Allow Public Queries
-                    </label>
-                  </div>
-                  {/* Set as Active Button */}
-                  <Button
-                    onClick={handleSetActiveVectorstore}
-                    disabled={!selectedFile}
-                    variant="default"
-                    size="sm"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                  >
-                    Set as Active
-                  </Button>
-                </div>
-
-                {/* Upload File */}
-                <div>
-                  <h3 className="text-base sm:text-lg font-medium mb-2">
-                    Upload File
-                  </h3>
-                  <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2">
-                    {/* Styled File Input Area */}
-                    <label className="flex-1 flex items-center justify-center px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors duration-200">
-                      <div className="flex flex-col items-center">
-                        <Upload className="h-6 w-6 text-gray-500" />
-                        <p className="mt-2 text-gray-500">Click to upload a file</p>
-                        <p className="mt-1 text-xs text-gray-400">(PDF, Excel)</p>
+                      <Avatar
+                        className={`w-10 h-10 ${
+                          message.isUser ? "ml-3" : "mr-3"
+                        } ring-2 ring-white shadow-md`}
+                      >
+                        <AvatarImage
+                          src={
+                            message.isUser
+                              ? "/path/to/user-avatar.png"
+                              : "/path/to/ai-avatar.png"
+                          }
+                        />
+                        <AvatarFallback>
+                          {message.isUser ? "U" : "AI"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div
+                        className={`rounded-2xl overflow-hidden shadow-lg ${
+                          message.isUser
+                            ? "bg-gradient-to-br from-indigo-600 to-indigo-800"
+                            : "bg-gradient-to-br from-blue-50 to-indigo-50"
+                        }`}
+                      >
+                        <div
+                          className={`p-3 sm:p-4 ${message.isUser ? "text-white" : "text-indigo-800"}`}
+                        >
+                          <ReactMarkdown
+                            children={message.text}
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              a: ({ node, ...props }) => (
+                                <a
+                                  {...props}
+                                  className="text-blue-400 underline"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                />
+                              ),
+                              code: ({ node, inline, className, children, ...props }) => {
+                                const match = /language-(\w+)/.exec(className || "");
+                                return !inline && match ? (
+                                  <SyntaxHighlighter
+                                    style={materialLight}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    {...props}
+                                  >
+                                    {String(children).replace(/\n$/, "")}
+                                  </SyntaxHighlighter>
+                                ) : (
+                                  <code className="bg-gray-200 rounded px-1" {...props}>
+                                    {children}
+                                  </code>
+                                );
+                              },
+                            }}
+                          />
+                        </div>
+                        <div
+                          className={`px-3 py-1 sm:px-4 sm:py-2 text-[10px] sm:text-xs ${
+                            message.isUser ? "bg-indigo-900 text-blue-100" : "bg-indigo-100 text-indigo-700"
+                          }`}
+                        >
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center justify-end cursor-pointer">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  {formatTime(message.timestamp)}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{message.timestamp.toLocaleString()}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                       </div>
-                      <input
-                        type="file"
-                        accept=".pdf,.xlsx,.xls"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                        disabled={uploading} // Disable input while uploading
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* Uploaded Files */}
-                <div>
-                  <h3 className="text-base sm:text-lg font-medium mb-2">
-                    Uploaded Files
-                  </h3>
-                  <div className="bg-white/50 backdrop-blur-sm rounded-lg overflow-hidden">
-                    <Input
-                      type="text"
-                      placeholder="Search files..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="mb-2 px-2 py-1 text-sm"
-                    />
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[40px]">Select</TableHead>
-                          <TableHead className="text-xs sm:text-sm">
-                            File Name
-                          </TableHead>
-                          <TableHead className="text-xs sm:text-sm">Size</TableHead>
-                          <TableHead className="text-xs sm:text-sm">
-                            Upload Date
-                          </TableHead>
-                          <TableHead className="text-xs sm:text-sm">
-                            Actions
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {files
-                          .filter((file) =>
-                            file.name
-                              .toLowerCase()
-                              .includes(searchQuery.toLowerCase())
-                          )
-                          .map((file) => (
-                            <TableRow
-                              key={file.id}
-                              className={`hover:bg-gray-50 transition-colors duration-150 ${
-                                activeVectorstore === file.unique_id
-                                  ? "bg-green-100"
-                                  : ""
-                              }`}
-                            >
-                              <TableCell>
-                                <RadioGroup
-                                  value={selectedFile}
-                                  onValueChange={(val) =>
-                                    handleSelectFile(val === file.id ? null : val)
-                                  }
-                                  className="flex items-center"
-                                >
-                                  <RadioGroupItem
-                                    value={file.id}
-                                    id={`radio-${file.id}`}
-                                  />
-                                </RadioGroup>
-                              </TableCell>
-                              <TableCell className="flex items-center text-xs sm:text-sm">
-                                <FileText className="h-3 w-3 sm:h-4 sm:w-4 mr-1 text-gray-500" />
-                                {file.name}
-                                {activeVectorstore === file.unique_id && (
-                                  <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-green-200 text-green-800 rounded">
-                                    Active
-                                  </span>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-xs sm:text-sm">
-                                {file.size}
-                              </TableCell>
-                              <TableCell className="text-xs sm:text-sm">
-                                {file.uploadDate}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteFile(file.id)}
-                                  className="text-red-600 hover:text-red-800 hover:bg-red-100 transition-colors duration-200"
-                                >
-                                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="sr-only">Delete file</span>
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-
-                {/* Active Vectorstore Display */}
-                {activeVectorstore && (
-                  <div className="mt-4 p-4 bg-green-100 rounded-md">
-                    <p className="text-green-800">
-                      Active Vectorstore:{" "}
-                      <span className="font-semibold">
-                        {files.find((file) => file.unique_id === activeVectorstore)?.name || activeVectorstore}
-                      </span>
-                    </p>
-                  </div>
-                )}
-
-                {/* Clear Chat History Section */}
-                <div className="mt-6">
-                  <h3 className="text-base sm:text-lg font-medium mb-2">
-                    Manage Chat History
-                  </h3>
-                  <Button
-                    variant="destructive"
-                    onClick={handleClearChatHistory}
-                    className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white transition-all duration-200"
-                  >
-                    <Trash className="h-5 w-5" />
-                    <span>Clear Chat History</span>
-                  </Button>
-                </div>
-              </div>
-            </ScrollArea>
-          </Card>
-        </div>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+              {messages.length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1, duration: 0.5 }}
+                  className="absolute bottom-4 left-4 right-4 text-center text-gray-500 text-sm"
+                >
+                  Welcome! Type a message to get started.
+                </motion.div>
+              )}
+            </div>
+          </ScrollArea>
+        </Card>
       </main>
 
-      {/* Toast Container for Notifications */}
+      {/* Footer with Input and Vectorstore Dropdown */}
+      <footer className="fixed bottom-0 left-0 right-0 z-10 border-t bg-white/80 backdrop-blur-sm p-2 sm:p-4">
+        <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
+          <div className="flex space-x-2">
+            {/* Dropdown only includes PDFs and Excels */}
+            <div className="w-1/3">
+              <Select onValueChange={handleSelectVectorstore} value={selectedUniqueId}>
+                <SelectTrigger className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm">
+                  <SelectValue placeholder="Select file" />
+                </SelectTrigger>
+                <SelectContent>
+                  {files.map((file) => (
+                    <SelectItem key={file.id} value={file.unique_id}>
+                      <span className="flex items-center">
+                        <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-2 text-gray-500" />
+                        {file.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Chat Input and Send Button */}
+            <div className="relative flex-1">
+              <Input
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="Type your message..."
+                className="w-full bg-white/50 backdrop-blur-sm border-gray-200 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 hover:bg-white/70 text-sm pr-10"
+                disabled={isLoading}
+              />
+              <Button
+                type="submit"
+                className="absolute right-1 top-1 bg-indigo-600 hover:bg-indigo-700 text-white transition-all duration-200 shadow-md hover:shadow-lg p-1"
+                disabled={!inputMessage.trim() || isLoading}
+              >
+                <SendIcon className="h-4 w-4" />
+                <span className="sr-only">Send message</span>
+              </Button>
+            </div>
+          </div>
+
+          {isLoading && (
+            <div className="relative pt-1 my-2">
+              <div className="flex mb-1 items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-indigo-600 bg-indigo-100">
+                    AI is thinking...
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-semibold inline-block text-indigo-600">
+                    {progress}%
+                  </span>
+                </div>
+              </div>
+              <div className="overflow-hidden h-1 mb-1 text-xs flex rounded bg-indigo-300">
+                <div
+                  style={{ width: `${progress}%` }}
+                  className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-indigo-600"
+                ></div>
+              </div>
+            </div>
+          )}
+        </form>
+      </footer>
+
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar />
     </div>
   );
+}
+
+function formatTime(date: Date) {
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
